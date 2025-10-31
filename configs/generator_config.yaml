@@ -1,0 +1,40 @@
+# Настройки генерации
+generation:
+  num_samples: 5
+  output_dir: "./outputs"
+  save_masks: true
+  image_format: "png"
+  max_operations_per_image: 3
+
+# Пути к данным
+paths:
+  source_images: "./sources/images"
+  source_markup: "./sources/markup"
+  output_images: "./outputs/images"
+  output_masks: "./outputs/masks"
+
+# Splicing манипуляции
+splicing:
+  enabled: true
+  operations:
+    bbox_swap:
+      enabled: true
+      probability: 0.4
+      allowed_categories: ["text", "date", "number", "name"]
+    
+    external_patch:
+      enabled: false
+      probability: 0.6
+      max_patches: 3
+      patch_size_range: [50, 300]  # min, max размер вставки
+      source_diversity: 0.7        # вероятность использовать внешний документ
+
+    internal_swap:
+      probability: 0.5
+      enabled: false
+
+# Настройки качества
+quality:
+  jpeg_quality: [80, 95]
+  blur_sigma: [0.1, 0.5]
+  noise_std: [0.01, 0.03]
