@@ -1,0 +1,45 @@
+# Model configuration
+model:
+  num_classes: 1
+  pretrained: true
+  checkpoint_path: null  # путь для продолжения обучения
+
+# Data configuration  
+data:
+  config_path: "configs/generator_config.yaml"
+  image_size: [1024, 1024]
+  batch_size: 8
+  num_train_samples: 50000
+  num_val_samples: 5000
+  num_workers: 4
+  cache_size: 200
+
+# Loss configuration
+loss:
+  alpha: 0.7
+  beta: 0.3
+  gamma: 2.0
+
+# Optimizer configuration
+optimizer:
+  name: "AdamW"
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+
+# Scheduler configuration
+scheduler:
+  name: "CosineAnnealingWarmRestarts"
+  T_0: 10
+  T_mult: 2
+
+# Training configuration
+training:
+  device: "cuda"
+  epochs: 100
+  log_interval: 50
+  save_interval: 5
+  grad_clip: 1.0
+  early_stopping: true
+  early_stopping_patience: 20
+  checkpoint_dir: "./checkpoints"
+  log_dir: "./logs"
