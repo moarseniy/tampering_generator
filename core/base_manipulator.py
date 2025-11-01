@@ -67,14 +67,12 @@ class BaseForgeryGenerator:
             Path(dir_path).mkdir(parents=True, exist_ok=True)
     
     def apply_quality_degradation(self, image: np.ndarray) -> np.ndarray:
-        """Применение деградации качества для реалистичности"""
+        """Применение деградации качества (JPEG сжатие) для реалистичности"""
         img = image.copy()
         
-        # JPEG сжатие
-        if 'jpeg_quality' in self.config['quality']:
-            quality = random.randint(*self.config['quality']['jpeg_quality'])
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
-            _, buffer = cv2.imencode('.jpg', img, encode_param)
-            img = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
-        
+        quality = random.randint(*self.config['quality']['jpeg_compression']['quality'])
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+        _, buffer = cv2.imencode('.jpg', img, encode_param)
+        img = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+    
         return img

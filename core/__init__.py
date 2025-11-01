@@ -23,16 +23,18 @@ class DocumentForgeryGenerator(BaseForgeryGenerator):
         result_image = base_image.copy()
         
         # Применение splicing операций
-        num_operations = random.randint(1, self.config['generation']['max_operations_per_image'])
+        num_operations = random.randint(self.config['generation']['operations_per_image'][0], 
+                                        self.config['generation']['operations_per_image'][1])
         
         for op_idx in range(num_operations):
             result_image, op_mask = self.apply_splicing_operation(result_image, base_markup)
             mask = np.maximum(mask, op_mask)
 
         # Применение деградации качества
-        if random.random() < 0.7:  # 70% chance
-            result_image = self.apply_quality_degradation(result_image)
-        
+        if 'jpeg_compression' in self.config['quality'] and self.config['quality']['jpeg_compression']['enabled']:
+            if random.random() < self.config['quality']['jpeg_compression']['prob']:
+                result_image = self.apply_quality_degradation(result_image)
+            
         # Сохранение результата
         filename = f"forgery_{sample_id:06d}"
         image_path, mask_path = save_forgery_result(
@@ -81,7 +83,7 @@ class DocumentForgeryGenerator(BaseForgeryGenerator):
             return self.splicing_ops.internal_bbox_swap(image, markup)
         
         return image, np.zeros(image.shape[:2], dtype=np.uint8)
-    
+     
     def generate_dataset(self):
         """Генерация всего набора данных"""
         num_samples = self.config['generation']['num_samples']

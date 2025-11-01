@@ -2,72 +2,58 @@
   "image_size": [1920, 1080],
   "bboxes": [
     {
-      "id": 1,
       "category": "photo",
       "bbox": [200, 243, 409, 560]
     },
     {
-      "id": 2,
       "category": "signature", 
       "bbox": [195, 958, 268, 185]
     },
     {
-      "id": 3,
       "category": "authority",
       "bbox": [708, 973, 82, 43]
     },
     {
-      "id": 4,
       "category": "birth_date",
       "bbox": [708, 727, 360, 52]
     },
     {
-      "id": 5,
       "category": "birth_place",
       "bbox": [708, 608, 327, 50]
     },
     {
-      "id": 6,
       "category": "issue_date",
       "bbox": [710, 846, 359, 52]
     },
     {
-      "id": 7,
       "category": "expiry_date",
       "bbox": [1456, 846, 397, 43]
     },
     {
-      "id": 8,
       "category": "gender",
       "bbox": [1455, 730, 51, 49]
     },
     {
-      "id": 9,
       "category": "id_number",
       "bbox": [1452, 970, 416, 43]
     },
     {
-      "id": 10,
       "category": "name",
       "bbox": [704, 365, 176, 47]
     },
     {
-      "id": 11,
       "category": "nationality",
       "bbox": [705, 492, 579, 51]
     },
     {
-      "id": 12,
       "category": "number",
       "bbox": [1454, 491, 345, 51]
     },
     {
-      "id": 13,
       "category": "surname",
       "bbox": [703, 242, 190, 55]
     },
     {
-      "id": 14,
       "category": "face",
       "bbox": [254, 337, 319, 434]
     }

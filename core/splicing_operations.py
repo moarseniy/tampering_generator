@@ -57,7 +57,7 @@ class SplicingOperations:
         patch_h, patch_w = patch_region.shape[:2]
         
         # Ограничение размера патча
-        max_patch_size = min(self.config['splicing']['operations']['external_patch']['patch_size_range'])
+        max_patch_size = self.config['splicing']['operations']['external_patch']['patch_size_range'][0]
         if patch_h > max_patch_size or patch_w > max_patch_size:
             scale = max_patch_size / max(patch_h, patch_w)
             new_w, new_h = int(patch_w * scale), int(patch_h * scale)
