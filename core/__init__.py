@@ -7,6 +7,21 @@ from .base_manipulator import BaseForgeryGenerator
 from .splicing_operations import SplicingOperations
 from .utils import save_forgery_result, ensure_directory
 
+from .utils import (
+    ensure_directory, 
+    save_forgery_result, 
+    validate_bbox
+)
+
+from .dataset import (
+    ForgeryDataset, 
+    InlineForgeryGenerator,     
+    get_train_transforms,
+    get_val_transforms,
+    get_mask_transforms
+)
+
+
 class DocumentForgeryGenerator(BaseForgeryGenerator):
     def __init__(self, config_path: str = "configs/generator_config.yaml"):
         super().__init__(config_path)
