@@ -53,13 +53,15 @@ class ForgeryDataset(Dataset):
         
         # Применяем трансформации если заданы
         if self.transform:
-            image = self.transform(image)
+            transformed = self.transform(image=image)
+            image = transformed["image"]
         else:
             # Базовая трансформация в тензор
             image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
         
         if self.target_transform:
-            mask = self.target_transform(mask)
+            transformed_mask = self.target_transform(image=mask)
+            mask = transformed_mask["image"]
         else:
             # Базовая трансформация маски
             mask = torch.from_numpy(mask).unsqueeze(0).float() / 255.0

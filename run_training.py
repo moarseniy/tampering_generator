@@ -11,8 +11,8 @@ from datetime import datetime
 
 # Наши модули
 from core import ForgeryDataset, get_train_transforms, get_mask_transforms
-from model import DocumentForgerySegmentor
-from loss import ForgerySegmentationLoss
+from models import DocumentForgerySegmentor
+from losses import ForgerySegmentationLoss
 
 class ForgeryDetectionTrainer:
     def __init__(self, config):
@@ -121,8 +121,7 @@ class ForgeryDetectionTrainer:
             transform=train_transform,
             target_transform=mask_transform,
             image_size=tuple(self.config['data']['image_size']),
-            num_samples=self.config['data']['num_train_samples'],
-            cache_size=self.config['data']['cache_size']
+            num_samples=self.config['data']['num_train_samples']
         )
         
         # Validation dataset (меньше samples, без аугментаций)
@@ -135,8 +134,7 @@ class ForgeryDetectionTrainer:
             transform=val_transform,
             target_transform=val_transform,
             image_size=tuple(self.config['data']['image_size']),
-            num_samples=self.config['data']['num_val_samples'],
-            cache_size=self.config['data']['cache_size']
+            num_samples=self.config['data']['num_val_samples']
         )
         
         # DataLoaders
