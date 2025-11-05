@@ -18,43 +18,69 @@ class BaseForgeryGenerator:
             return yaml.safe_load(f)
     
     def load_sources(self) -> Dict:
-        """Загрузка исходных изображений и разметки"""
+        """Индексирование путей исходных изображений и загрузка разметки (без кеша изображений)."""
         sources = {
-            'images': {},
+            'images': {},  # key -> absolute image path
             'markup': {}
         }
         
-        # Загрузка изображений
-        images_dir = Path(self.config['paths']['source_images'])
+        # Индексирование путей изображений
+        images_dir = Path(self.config['paths']['source_images']).resolve()
         for img_path in images_dir.glob("*.*"):
             if img_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
-                image = cv2.imread(str(img_path))
-                if image is not None:
-                    # print(img_path, img_path.name)
-                    sources['images'][img_path.name] = image
+                sources['images'][img_path.name] = str(img_path)
         
         # Загрузка разметки
-        markup_dir = Path(self.config['paths']['source_markup'])
+        markup_dir = Path(self.config['paths']['source_markup']).resolve()
         for json_path in markup_dir.glob("*.json"):
             with open(json_path, 'r', encoding='utf-8') as f:
                 markup_data = json.load(f)
-                # print(json_path, json_path.stem)
                 sources['markup'][json_path.stem] = markup_data
         
-        # print(sources['markup'])
-
-        print(f"Загружено {len(sources['images'])} изображений и {len(sources['markup'])} разметок")
+        print(f"Загружено {len(sources['images'])} путей изображений и {len(sources['markup'])} разметок")
         return sources
     
     def get_random_source(self) -> Tuple[str, np.ndarray, Dict]:
-        """Получение случайного исходного документа"""
+        """Получение случайного исходного документа (ленивая загрузка изображения с диска)."""
         available_keys = list(self.sources['images'].keys())
         if not available_keys:
             raise ValueError("Нет доступных исходных документов")
         
         key = random.choice(available_keys)
-        # print(self.sources['markup'], key)
-        return key, self.sources['images'][key], self.sources['markup'].get(key, {})
+        img_path = self.sources['images'][key]
+        image = cv2.imread(str(img_path))
+        if image is None:
+            raise ValueError(f"Не удалось загрузить изображение: {img_path}")
+        return key, image, self.sources['markup'].get(key, {})
+
+    def apply_splicing_operation(self, image: np.ndarray, markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """Применение случайной splicing операции (общая реализация без кеша)."""
+        splicing_config = self.config['splicing']['operations']
+        
+        # Выбор операции на основе вероятностей
+        operations = []
+        probabilities = []
+        
+        for op_name, op_config in splicing_config.items():
+            if op_config.get('enabled', False):
+                operations.append(op_name)
+                probabilities.append(op_config.get('probability', 0.5))
+        
+        if not operations:
+            return image, np.zeros(image.shape[:2], dtype=np.uint8)
+        
+        chosen_op = random.choices(operations, weights=probabilities)[0]
+        
+        if chosen_op == 'bbox_swap':
+            target_key, target_image, target_markup = self.get_random_source()
+            return self.splicing_ops.bbox_swap(image, markup, target_image, target_markup)
+        elif chosen_op == 'external_patch':
+            patch_key, patch_image, patch_markup = self.get_random_source()
+            return self.splicing_ops.external_patch_insertion(image, markup, patch_image, patch_markup)
+        elif chosen_op == 'internal_swap':
+            return self.splicing_ops.internal_bbox_swap(image, markup)
+        
+        return image, np.zeros(image.shape[:2], dtype=np.uint8)
     
     def create_output_directories(self):
         """Создание выходных директорий"""

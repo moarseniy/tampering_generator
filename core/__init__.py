@@ -63,41 +63,7 @@ class DocumentForgeryGenerator(BaseForgeryGenerator):
         
         return image_path, mask_path
     
-    def apply_splicing_operation(self, image: np.ndarray, markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        """Применение случайной splicing операции"""
-        splicing_config = self.config['splicing']['operations']
-        
-        # Выбор операции на основе вероятностей
-        operations = []
-        probabilities = []
-        
-        for op_name, op_config in splicing_config.items():
-            if op_config.get('enabled', False):
-                operations.append(op_name)
-                probabilities.append(op_config.get('probability', 0.5))
-        
-        if not operations:
-            return image, np.zeros(image.shape[:2], dtype=np.uint8)
-        
-        chosen_op = random.choices(operations, weights=probabilities)[0]
-
-        if chosen_op == 'bbox_swap':
-            # Выбор целевого документа для обмена
-            # print("bbox_swap")
-            target_key, target_image, target_markup = self.get_random_source()
-            return self.splicing_ops.bbox_swap(image, markup, target_image, target_markup)
-        
-        elif chosen_op == 'external_patch':
-            # Выбор документа-донора
-            # print("external_patch")
-            patch_key, patch_image, patch_markup = self.get_random_source()
-            return self.splicing_ops.external_patch_insertion(image, markup, patch_image, patch_markup)
-        
-        elif chosen_op == 'internal_swap':
-            # print("internal_swap")
-            return self.splicing_ops.internal_bbox_swap(image, markup)
-        
-        return image, np.zeros(image.shape[:2], dtype=np.uint8)
+    # Реализация apply_splicing_operation унаследована от BaseForgeryGenerator
      
     def generate_dataset(self):
         """Генерация всего набора данных"""
@@ -106,12 +72,12 @@ class DocumentForgeryGenerator(BaseForgeryGenerator):
         print(f"Начало генерации {num_samples} подделок...")
         
         for i in range(num_samples):
-            try:
-                image_path, mask_path = self.generate_single_forgery(i)
-                # if i % 100 == 0:
-                print(f"Сгенерировано {i+1}/{num_samples}")
-            except Exception as e:
-                print(f"Ошибка при генерации sample {i}: {e}")
-                continue
+            # try:
+            image_path, mask_path = self.generate_single_forgery(i)
+            # if i % 100 == 0:
+            print(f"Сгенерировано {i+1}/{num_samples}")
+            # except Exception as e:
+            #     print(f"Ошибка при генерации sample {i}: {e}")
+            #     continue
         
         print(f"Генерация завершена! Создано {num_samples} подделок")
