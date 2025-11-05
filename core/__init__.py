@@ -25,7 +25,7 @@ from .dataset import (
 class DocumentForgeryGenerator(BaseForgeryGenerator):
     def __init__(self, config_path: str = "configs/generator_config.yaml"):
         super().__init__(config_path)
-        self.splicing_ops = SplicingOperations(self.sources)
+        self.splicing_ops = SplicingOperations(self.sources, self.config)
         self.create_output_directories()
     
     def generate_single_forgery(self, sample_id: int) -> Tuple[str, str]:

@@ -5,7 +5,8 @@ from typing import Dict, Tuple, List
 from .bbox_processor import BBoxProcessor
 
 class SplicingOperations:
-    def __init__(self, sources: Dict):
+    def __init__(self, sources: Dict, config):
+        self.config = config
         self.sources = sources
         self.bbox_processor = BBoxProcessor()
     

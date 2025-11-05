@@ -15,6 +15,15 @@ class BBoxProcessor:
                          bbox: Dict, resize: bool = True) -> np.ndarray:
         """Вставка области в bounding box"""
         x, y, w, h = bbox['bbox']
+
+        # Проверяем, не выходит ли bbox за границы изображения
+        img_h, img_w = target_image.shape[:2]
+        
+        # Корректируем координаты и размеры, если выходят за границы
+        x = max(0, min(x, img_w - 1))
+        y = max(0, min(y, img_h - 1))
+        w = min(w, img_w - x)
+        h = min(h, img_h - y)
         
         if resize and source_region.shape[:2] != (h, w):
             source_region = cv2.resize(source_region, (w, h))
