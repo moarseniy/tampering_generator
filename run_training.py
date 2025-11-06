@@ -121,7 +121,7 @@ class ForgeryDetectionTrainer:
         
         # Train dataset
         train_dataset = ForgeryDataset(
-            config_path=self.config['data']['config_path'],
+            config_path=self.config['data']['config_path_train'],
             transform=train_transform,
             target_transform=mask_transform,
             image_size=tuple(self.config['data']['image_size']),
@@ -134,7 +134,7 @@ class ForgeryDetectionTrainer:
         )
         
         val_dataset = ForgeryDataset(
-            config_path=self.config['data']['config_path'],
+            config_path=self.config['data']['config_path_val'],
             transform=val_transform,
             target_transform=mask_transform,
             image_size=tuple(self.config['data']['image_size']),
@@ -147,7 +147,7 @@ class ForgeryDetectionTrainer:
         )
         
         test_dataset = ForgeryDataset(
-            config_path=self.config['data']['config_path'],
+            config_path=self.config['data']['config_path_test'],
             transform=test_transform,
             target_transform=mask_transform,
             image_size=tuple(self.config['data']['image_size']),
@@ -442,14 +442,15 @@ def get_training_config():
             'checkpoint_path': None  # путь к чекпоинту для продолжения обучения
         },
         'data': {
-            'config_path': 'configs/generator_config.yaml',
+            'config_path_train': 'configs/generator_config_train.yaml',
+            'config_path_test': 'configs/generator_config_test.yaml',
+            'config_path_val': 'configs/generator_config_val.yaml',
             'image_size': [1024, 1024],
             'batch_size': 8,
             'num_train_samples': 50000,
             'num_val_samples': 5000,
             'num_test_samples': 5000,
-            'num_workers': 4,
-            'cache_size': 200
+            'num_workers': 4
         },
         'loss': {
             'alpha': 0.7,
