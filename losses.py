@@ -8,6 +8,9 @@ class DiceLoss(nn.Module):
         self.smooth = smooth
     
     def forward(self, pred, target):
+        if target.dtype != torch.float32:
+            target = target.float()
+
         pred = torch.sigmoid(pred)
         
         # Flatten
@@ -28,6 +31,9 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
     
     def forward(self, pred, target):
+        if target.dtype != torch.float32:
+            target = target.float()
+
         BCE_loss = F.binary_cross_entropy_with_logits(pred, target, reduction='none')
         
         pt = torch.exp(-BCE_loss)
@@ -40,6 +46,9 @@ class BoundaryLoss(nn.Module):
         super().__init__()
     
     def forward(self, pred_boundary, target_boundary):
+        if target_boundary.dtype != torch.float32:
+            target_boundary = target_boundary.float()
+
         return F.binary_cross_entropy_with_logits(pred_boundary, target_boundary)
 
 class ForgerySegmentationLoss(nn.Module):
@@ -55,9 +64,12 @@ class ForgerySegmentationLoss(nn.Module):
         self.boundary_loss = BoundaryLoss()
         
     def forward(self, predictions, targets):
+        if targets.dtype != torch.float32:
+            targets = targets.float()
+
         seg_pred = predictions['segmentation']
         boundary_pred = predictions['boundary']
-        aux_preds = predictions['auxiliary']
+        aux_preds = predictions.get('auxiliary', [])
         
         # Main segmentation loss
         loss_seg = (self.alpha * self.focal_loss(seg_pred, targets) +
@@ -68,7 +80,7 @@ class ForgerySegmentationLoss(nn.Module):
         loss_boundary = self.boundary_loss(boundary_pred, boundary_mask)
         
         # Auxiliary losses
-        loss_aux = 0
+        loss_aux = torch.tensor(0.0, device=seg_pred.device)
         for aux_pred in aux_preds:
             loss_aux += self.focal_loss(aux_pred, targets) * 0.4
         

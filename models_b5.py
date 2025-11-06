@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import SegformerConfig, SegformerModel
-from timm.models.layers import DropPath
 
 class MultiScaleContextFusion(nn.Module):
     def __init__(self, in_channels, reduction=16):

@@ -10,6 +10,8 @@ from .splicing_operations import SplicingOperations
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
+import torchvision.transforms as T
+
 class ForgeryDataset(Dataset):
     """
     PyTorch Dataset для генерации подделок документов на лету
@@ -53,15 +55,17 @@ class ForgeryDataset(Dataset):
         
         # Применяем трансформации если заданы
         if self.transform:
-            transformed = self.transform(image=image)
-            image = transformed["image"]
+            # transformed = self.transform(image=image)
+            # image = transformed["image"]
+            image = self.transform(image)
         else:
             # Базовая трансформация в тензор
             image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
         
         if self.target_transform:
-            transformed_mask = self.target_transform(image=mask)
-            mask = transformed_mask["image"]
+            # transformed_mask = self.target_transform(image=mask)
+            # mask = transformed_mask["image"]
+            mask = self.target_transform(mask)
         else:
             # Базовая трансформация маски
             mask = torch.from_numpy(mask).unsqueeze(0).float() / 255.0
@@ -87,6 +91,11 @@ def get_train_transforms(image_size: Tuple[int, int] = (1024, 1024)):
     """
     Трансформации для обучения
     """
+    return T.Compose([
+        T.ToTensor(),
+        T.Resize((image_size[0], image_size[1]))
+    ])
+
     return A.Compose([
         A.Resize(image_size[0], image_size[1]),
         A.HorizontalFlip(p=0.5),
@@ -116,6 +125,11 @@ def get_val_transforms(image_size: Tuple[int, int] = (1024, 1024)):
     """
     Трансформации для валидации
     """
+    return T.Compose([
+        T.ToTensor(),
+        T.Resize((image_size[0], image_size[1]))
+    ])
+
     return A.Compose([
         A.Resize(image_size[0], image_size[1]),
         A.Normalize(
@@ -129,6 +143,11 @@ def get_mask_transforms(image_size: Tuple[int, int] = (1024, 1024)):
     """
     Трансформации для масок
     """
+    return T.Compose([
+        T.ToTensor(),
+        T.Resize((image_size[0], image_size[1]))
+    ])
+
     return A.Compose([
         A.Resize(image_size[0], image_size[1]),
         ToTensorV2()

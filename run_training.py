@@ -11,7 +11,11 @@ from datetime import datetime
 
 # Наши модули
 from core import ForgeryDataset, get_train_transforms, get_mask_transforms
-from models import DocumentForgerySegmentor
+
+from models_b5 import DocumentForgerySegmentor
+from models_b2 import LightDocumentForgerySegmentor
+from models_b0 import MiniDocumentForgerySegmentor
+
 from losses import ForgerySegmentationLoss
 
 class ForgeryDetectionTrainer:
@@ -41,7 +45,7 @@ class ForgeryDetectionTrainer:
     
     def _init_model(self):
         """Инициализация модели"""
-        model = DocumentForgerySegmentor(
+        model = MiniDocumentForgerySegmentor(
             num_classes=self.config['model']['num_classes'],
             pretrained=self.config['model']['pretrained']
         )
