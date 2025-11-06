@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Наши модули
-from core import ForgeryDataset, get_train_transforms, get_mask_transforms
+from core import ForgeryDataset, get_train_transforms, get_val_transforms, get_test_transforms, get_mask_transforms
 
 from models_b5 import DocumentForgerySegmentor
 from models_b2 import LightDocumentForgerySegmentor
@@ -32,7 +32,7 @@ class ForgeryDetectionTrainer:
         self.criterion = self._init_criterion()
         self.optimizer = self._init_optimizer()
         self.scheduler = self._init_scheduler()
-        self.train_loader, self.val_loader = self._init_data_loaders()
+        self.train_loader, self.val_loader, self.test_loader = self._init_data_loaders()
         
         # Трекеры обучения
         self.best_val_loss = float('inf')
@@ -129,16 +129,29 @@ class ForgeryDetectionTrainer:
         )
         
         # Validation dataset (меньше samples, без аугментаций)
-        val_transform = get_mask_transforms(
+        val_transform = get_val_transforms(
             image_size=tuple(self.config['data']['image_size'])
         )
         
         val_dataset = ForgeryDataset(
             config_path=self.config['data']['config_path'],
             transform=val_transform,
-            target_transform=val_transform,
+            target_transform=mask_transform,
             image_size=tuple(self.config['data']['image_size']),
             num_samples=self.config['data']['num_val_samples']
+        )
+        
+        # Test dataset (идентичен валидационному)
+        test_transform = get_test_transforms(
+            image_size=tuple(self.config['data']['image_size'])
+        )
+        
+        test_dataset = ForgeryDataset(
+            config_path=self.config['data']['config_path'],
+            transform=test_transform,
+            target_transform=mask_transform,
+            image_size=tuple(self.config['data']['image_size']),
+            num_samples=self.config['data']['num_test_samples']
         )
         
         # DataLoaders
@@ -159,11 +172,20 @@ class ForgeryDetectionTrainer:
             pin_memory=True
         )
         
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=self.config['data']['batch_size'],
+            shuffle=False,
+            num_workers=self.config['data']['num_workers'],
+            pin_memory=True
+        )
+        
         print(f"   Данные инициализированы:")
         print(f"   Train: {len(train_dataset)} samples")
         print(f"   Val: {len(val_dataset)} samples")
+        print(f"   Test: {len(test_dataset)} samples")
         
-        return train_loader, val_loader
+        return train_loader, val_loader, test_loader
     
     def _load_checkpoint(self, model, checkpoint_path):
         """Загрузка чекпоинта"""
@@ -271,6 +293,32 @@ class ForgeryDetectionTrainer:
             'val_seg_loss': avg_val_seg_loss
         }
     
+    def test_epoch(self):
+        """Тестирование модели на тестовом наборе"""
+        self.model.eval()
+        test_loss = 0
+        test_seg_loss = 0
+        
+        with torch.no_grad():
+            for images, masks in self.test_loader:
+                images = images.to(self.device, non_blocking=True)
+                masks = masks.to(self.device, non_blocking=True)
+                
+                outputs = self.model(images)
+                loss_dict = self.criterion(outputs, masks)
+                
+                test_loss += loss_dict['total'].item()
+                test_seg_loss += loss_dict['segmentation'].item()
+        
+        num_batches = len(self.test_loader)
+        avg_test_loss = test_loss / num_batches
+        avg_test_seg_loss = test_seg_loss / num_batches
+        
+        return {
+            'test_loss': avg_test_loss,
+            'test_seg_loss': avg_test_seg_loss
+        }
+    
     def save_checkpoint(self, is_best=False):
         """Сохранение чекпоинта"""
         checkpoint = {
@@ -371,6 +419,18 @@ class ForgeryDetectionTrainer:
             #         break
         
         print(f"\nОбучение завершено! Лучшая val loss: {self.best_val_loss:.4f}")
+        
+        # Финальное тестирование на тестовом наборе
+        print("\n" + "=" * 50)
+        print("Финальное тестирование на тестовом наборе...")
+        test_metrics = self.test_epoch()
+        print(f"Test Loss: {test_metrics['test_loss']:.4f} | "
+              f"Test Seg Loss: {test_metrics['test_seg_loss']:.4f}")
+        
+        # Логирование тестовых метрик
+        self.writer.add_scalar('Loss/test', test_metrics['test_loss'], self.current_epoch)
+        self.writer.add_scalar('Loss/test_seg', test_metrics['test_seg_loss'], self.current_epoch)
+        
         self.writer.close()
 
 def get_training_config():
@@ -387,6 +447,7 @@ def get_training_config():
             'batch_size': 8,
             'num_train_samples': 50000,
             'num_val_samples': 5000,
+            'num_test_samples': 5000,
             'num_workers': 4,
             'cache_size': 200
         },

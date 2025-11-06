@@ -139,6 +139,16 @@ def get_val_transforms(image_size: Tuple[int, int] = (1024, 1024)):
         ToTensorV2()
     ])
 
+def get_test_transforms(image_size: Tuple[int, int] = (1024, 1024)):
+    """
+    Трансформации для тестирования (идентичны валидационным - без аугментаций)
+    """
+    return T.Compose([
+        T.ToTensor(),
+        T.Resize((image_size[0], image_size[1]))
+    ])
+
+
 def get_mask_transforms(image_size: Tuple[int, int] = (1024, 1024)):
     """
     Трансформации для масок
