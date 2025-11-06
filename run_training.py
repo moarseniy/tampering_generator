@@ -52,7 +52,7 @@ class ForgeryDetectionTrainer:
         
         # Multi-GPU поддержка
         if torch.cuda.device_count() > 1:
-            print(f"🚀 Используется {torch.cuda.device_count()} GPU")
+            print(f"Используется {torch.cuda.device_count()} GPU")
             model = nn.DataParallel(model)
         
         model = model.to(self.device)
@@ -159,7 +159,7 @@ class ForgeryDetectionTrainer:
             pin_memory=True
         )
         
-        print(f"✅ Данные инициализированы:")
+        print(f"   Данные инициализированы:")
         print(f"   Train: {len(train_dataset)} samples")
         print(f"   Val: {len(val_dataset)} samples")
         
@@ -168,7 +168,7 @@ class ForgeryDetectionTrainer:
     def _load_checkpoint(self, model, checkpoint_path):
         """Загрузка чекпоинта"""
         if os.path.exists(checkpoint_path):
-            print(f"🔄 Загружаем чекпоинт: {checkpoint_path}")
+            print(f"Загружаем чекпоинт: {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             
             if isinstance(model, nn.DataParallel):
@@ -185,7 +185,7 @@ class ForgeryDetectionTrainer:
             if 'best_val_loss' in checkpoint:
                 self.best_val_loss = checkpoint['best_val_loss']
             
-            print(f"✅ Чекпоинт загружен (epoch {self.current_epoch})")
+            print(f"Чекпоинт загружен (epoch {self.current_epoch})")
     
     def train_epoch(self):
         """Одна эпоха обучения"""
@@ -296,7 +296,7 @@ class ForgeryDetectionTrainer:
                 'best_model.pth'
             )
             torch.save(checkpoint, best_path)
-            print(f"🏆 Новая лучшая модель сохранена: {best_path}")
+            print(f"Новая лучшая модель сохранена: {best_path}")
     
     def log_metrics(self, train_metrics, val_metrics):
         """Логирование метрик в TensorBoard"""
@@ -316,8 +316,8 @@ class ForgeryDetectionTrainer:
     
     def train(self):
         """Основной цикл обучения"""
-        print("🚀 Начало обучения модели детекции подделок!")
-        print(f"📊 Конфигурация: {self.config['training']}")
+        print("Начало обучения модели детекции подделок!")
+        print(f"Конфигурация: {self.config['training']}")
         
         for epoch in range(self.current_epoch, self.config['training']['epochs']):
             self.current_epoch = epoch
@@ -346,11 +346,11 @@ class ForgeryDetectionTrainer:
             self.log_metrics(train_metrics, val_metrics)
             
             # Вывод статистики
-            print(f"✅ Train Loss: {train_metrics['total_loss']:.4f} | "
+            print(f"Train Loss: {train_metrics['total_loss']:.4f} | "
                   f"Val Loss: {val_metrics['val_loss']:.4f} | "
                   f"Time: {train_time + val_time:.1f}s")
             
-            print(f"📊 Детали: Seg: {train_metrics['seg_loss']:.4f} | "
+            print(f"Детали: Seg: {train_metrics['seg_loss']:.4f} | "
                   f"Boundary: {train_metrics['boundary_loss']:.4f} | "
                   f"Aux: {train_metrics['aux_loss']:.4f}")
             
@@ -358,19 +358,19 @@ class ForgeryDetectionTrainer:
             is_best = val_metrics['val_loss'] < self.best_val_loss
             if is_best:
                 self.best_val_loss = val_metrics['val_loss']
-                print(f"🎉 Новый лучший результат: {self.best_val_loss:.4f}")
+                print(f"Новый лучший результат: {self.best_val_loss:.4f}")
             
             # Сохраняем каждые N эпох или если это лучшая модель
             if (epoch + 1) % self.config['training']['save_interval'] == 0 or is_best:
                 self.save_checkpoint(is_best=is_best)
             
             # Ранняя остановка
-            if self.config['training'].get('early_stopping'):
-                if epoch - self.best_epoch > self.config['training']['early_stopping_patience']:
-                    print(f"🛑 Ранняя остановка на эпохе {epoch}")
-                    break
+            # if self.config['training'].get('early_stopping'):
+            #     if epoch - self.best_epoch > self.config['training']['early_stopping_patience']:
+            #         print(f"Ранняя остановка на эпохе {epoch}")
+            #         break
         
-        print(f"\n🎉 Обучение завершено! Лучшая val loss: {self.best_val_loss:.4f}")
+        print(f"\nОбучение завершено! Лучшая val loss: {self.best_val_loss:.4f}")
         self.writer.close()
 
 def get_training_config():
@@ -429,9 +429,9 @@ if __name__ == "__main__":
     try:
         trainer.train()
     except KeyboardInterrupt:
-        print("\n⚠️ Обучение прервано пользователем")
+        print("\nОбучение прервано пользователем")
         # Сохраняем чекпоинт при прерывании
         trainer.save_checkpoint()
     except Exception as e:
-        print(f"\n❌ Ошибка во время обучения: {e}")
+        print(f"\nОшибка во время обучения: {e}")
         raise
