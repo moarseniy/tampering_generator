@@ -209,6 +209,43 @@ class ForgeryDetectionTrainer:
             
             print(f"Чекпоинт загружен (epoch {self.current_epoch})")
     
+    def _compute_segmentation_metrics(self, logits, targets, threshold=0.5, eps=1e-7):
+        """Расчет базовых метрик сегментации"""
+        logits = logits.detach()
+        targets = targets.detach()
+
+        if targets.dtype != torch.float32:
+            targets = targets.float()
+
+        if targets.dim() == 3:
+            targets = targets.unsqueeze(1)
+
+        probs = torch.sigmoid(logits)
+        preds = (probs >= threshold).float()
+
+        preds_flat = preds.view(preds.size(0), -1)
+        targets_flat = targets.view(targets.size(0), -1)
+
+        intersection = (preds_flat * targets_flat).sum(1)
+        pred_sum = preds_flat.sum(1)
+        target_sum = targets_flat.sum(1)
+        union = pred_sum + target_sum - intersection
+
+        dice = (2 * intersection + eps) / (pred_sum + target_sum + eps)
+        iou = (intersection + eps) / (union + eps)
+
+        fp = pred_sum - intersection
+        fn = target_sum - intersection
+        precision = (intersection + eps) / (intersection + fp + eps)
+        recall = (intersection + eps) / (intersection + fn + eps)
+
+        return {
+            'dice': dice.mean().item(),
+            'iou': iou.mean().item(),
+            'precision': precision.mean().item(),
+            'recall': recall.mean().item()
+        }
+
     def train_epoch(self):
         """Одна эпоха обучения"""
         self.model.train()
@@ -216,6 +253,12 @@ class ForgeryDetectionTrainer:
         epoch_seg_loss = 0
         epoch_boundary_loss = 0
         epoch_aux_loss = 0
+        epoch_metrics = {
+            'dice': 0.0,
+            'iou': 0.0,
+            'precision': 0.0,
+            'recall': 0.0
+        }
         
         for batch_idx, (images, masks) in enumerate(self.train_loader):
             images = images.to(self.device, non_blocking=True)
@@ -247,6 +290,11 @@ class ForgeryDetectionTrainer:
             epoch_boundary_loss += loss_dict.get('boundary', 0).item()
             epoch_aux_loss += loss_dict.get('auxiliary', 0).item()
             
+            with torch.no_grad():
+                batch_metrics = self._compute_segmentation_metrics(outputs['segmentation'], masks)
+                for key in epoch_metrics:
+                    epoch_metrics[key] += batch_metrics[key]
+
             # Логирование каждые N батчей
             if batch_idx % self.config['training']['log_interval'] == 0:
                 current_lr = self.optimizer.param_groups[0]['lr']
@@ -259,12 +307,14 @@ class ForgeryDetectionTrainer:
         avg_seg_loss = epoch_seg_loss / num_batches
         avg_boundary_loss = epoch_boundary_loss / num_batches
         avg_aux_loss = epoch_aux_loss / num_batches
+        avg_metrics = {k: v / num_batches for k, v in epoch_metrics.items()}
         
         return {
             'total_loss': avg_loss,
             'seg_loss': avg_seg_loss,
             'boundary_loss': avg_boundary_loss,
-            'aux_loss': avg_aux_loss
+            'aux_loss': avg_aux_loss,
+            **avg_metrics
         }
     
     def validate_epoch(self):
@@ -272,6 +322,12 @@ class ForgeryDetectionTrainer:
         self.model.eval()
         val_loss = 0
         val_seg_loss = 0
+        val_metrics = {
+            'dice': 0.0,
+            'iou': 0.0,
+            'precision': 0.0,
+            'recall': 0.0
+        }
         
         with torch.no_grad():
             for images, masks in self.val_loader:
@@ -283,14 +339,21 @@ class ForgeryDetectionTrainer:
                 
                 val_loss += loss_dict['total'].item()
                 val_seg_loss += loss_dict['segmentation'].item()
+
+                batch_metrics = self._compute_segmentation_metrics(outputs['segmentation'], masks)
+                for key in val_metrics:
+                    val_metrics[key] += batch_metrics[key]
         
         num_batches = len(self.val_loader)
+        num_batches = max(num_batches, 1)
         avg_val_loss = val_loss / num_batches
         avg_val_seg_loss = val_seg_loss / num_batches
+        avg_val_metrics = {k: v / num_batches for k, v in val_metrics.items()}
         
         return {
             'val_loss': avg_val_loss,
-            'val_seg_loss': avg_val_seg_loss
+            'val_seg_loss': avg_val_seg_loss,
+            **avg_val_metrics
         }
     
     def test_epoch(self):
@@ -298,6 +361,12 @@ class ForgeryDetectionTrainer:
         self.model.eval()
         test_loss = 0
         test_seg_loss = 0
+        test_metrics = {
+            'dice': 0.0,
+            'iou': 0.0,
+            'precision': 0.0,
+            'recall': 0.0
+        }
         
         with torch.no_grad():
             for images, masks in self.test_loader:
@@ -309,14 +378,21 @@ class ForgeryDetectionTrainer:
                 
                 test_loss += loss_dict['total'].item()
                 test_seg_loss += loss_dict['segmentation'].item()
+
+                batch_metrics = self._compute_segmentation_metrics(outputs['segmentation'], masks)
+                for key in test_metrics:
+                    test_metrics[key] += batch_metrics[key]
         
         num_batches = len(self.test_loader)
+        num_batches = max(num_batches, 1)
         avg_test_loss = test_loss / num_batches
         avg_test_seg_loss = test_seg_loss / num_batches
+        avg_test_metrics = {k: v / num_batches for k, v in test_metrics.items()}
         
         return {
             'test_loss': avg_test_loss,
-            'test_seg_loss': avg_test_seg_loss
+            'test_seg_loss': avg_test_seg_loss,
+            **avg_test_metrics
         }
     
     def save_checkpoint(self, is_best=False):
@@ -353,10 +429,18 @@ class ForgeryDetectionTrainer:
         self.writer.add_scalar('Loss/train_seg', train_metrics['seg_loss'], self.current_epoch)
         self.writer.add_scalar('Loss/train_boundary', train_metrics['boundary_loss'], self.current_epoch)
         self.writer.add_scalar('Loss/train_aux', train_metrics['aux_loss'], self.current_epoch)
+        self.writer.add_scalar('Metrics/train_dice', train_metrics['dice'], self.current_epoch)
+        self.writer.add_scalar('Metrics/train_iou', train_metrics['iou'], self.current_epoch)
+        self.writer.add_scalar('Metrics/train_precision', train_metrics['precision'], self.current_epoch)
+        self.writer.add_scalar('Metrics/train_recall', train_metrics['recall'], self.current_epoch)
         
         # Val metrics
         self.writer.add_scalar('Loss/val', val_metrics['val_loss'], self.current_epoch)
         self.writer.add_scalar('Loss/val_seg', val_metrics['val_seg_loss'], self.current_epoch)
+        self.writer.add_scalar('Metrics/val_dice', val_metrics['dice'], self.current_epoch)
+        self.writer.add_scalar('Metrics/val_iou', val_metrics['iou'], self.current_epoch)
+        self.writer.add_scalar('Metrics/val_precision', val_metrics['precision'], self.current_epoch)
+        self.writer.add_scalar('Metrics/val_recall', val_metrics['recall'], self.current_epoch)
         
         # Learning rate
         current_lr = self.optimizer.param_groups[0]['lr']
@@ -401,6 +485,11 @@ class ForgeryDetectionTrainer:
             print(f"Детали: Seg: {train_metrics['seg_loss']:.4f} | "
                   f"Boundary: {train_metrics['boundary_loss']:.4f} | "
                   f"Aux: {train_metrics['aux_loss']:.4f}")
+
+            print(f"Train Metrics: Dice: {train_metrics['dice']:.4f} | IoU: {train_metrics['iou']:.4f} | "
+                  f"Precision: {train_metrics['precision']:.4f} | Recall: {train_metrics['recall']:.4f}")
+            print(f"Val Metrics: Dice: {val_metrics['dice']:.4f} | IoU: {val_metrics['iou']:.4f} | "
+                  f"Precision: {val_metrics['precision']:.4f} | Recall: {val_metrics['recall']:.4f}")
             
             # Сохранение чекпоинта
             is_best = val_metrics['val_loss'] < self.best_val_loss
@@ -426,10 +515,16 @@ class ForgeryDetectionTrainer:
         test_metrics = self.test_epoch()
         print(f"Test Loss: {test_metrics['test_loss']:.4f} | "
               f"Test Seg Loss: {test_metrics['test_seg_loss']:.4f}")
+        print(f"Test Metrics: Dice: {test_metrics['dice']:.4f} | IoU: {test_metrics['iou']:.4f} | "
+              f"Precision: {test_metrics['precision']:.4f} | Recall: {test_metrics['recall']:.4f}")
         
         # Логирование тестовых метрик
         self.writer.add_scalar('Loss/test', test_metrics['test_loss'], self.current_epoch)
         self.writer.add_scalar('Loss/test_seg', test_metrics['test_seg_loss'], self.current_epoch)
+        self.writer.add_scalar('Metrics/test_dice', test_metrics['dice'], self.current_epoch)
+        self.writer.add_scalar('Metrics/test_iou', test_metrics['iou'], self.current_epoch)
+        self.writer.add_scalar('Metrics/test_precision', test_metrics['precision'], self.current_epoch)
+        self.writer.add_scalar('Metrics/test_recall', test_metrics['recall'], self.current_epoch)
         
         self.writer.close()
 
