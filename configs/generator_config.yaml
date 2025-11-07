@@ -1,7 +1,7 @@
 # Настройки генерации
 generation:
   num_samples: 50  # Используется только для офлайн генерации
-  forgeries_per_source: 10  # Количество подделок на один оригинал (для датасета)
+  forgeries_per_source: 10  # Количество подделок на один оригинал
   output_dir: "./outputs"
   save_masks: true
   image_format: "png"

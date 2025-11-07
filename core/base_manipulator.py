@@ -30,13 +30,13 @@ class BaseForgeryGenerator:
         
         # Индексирование путей изображений
         images_dir = Path(self.config['paths']['source_images']).resolve()
-        for img_path in images_dir.glob("*.*"):
+        for img_path in images_dir.rglob("*.*"):
             if img_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
                 sources['images'][img_path.name] = str(img_path)
         
         # Загрузка разметки
         markup_dir = Path(self.config['paths']['source_markup']).resolve()
-        for json_path in markup_dir.glob("*.json"):
+        for json_path in markup_dir.rglob("*.json"):
             with open(json_path, 'r', encoding='utf-8') as f:
                 markup_data = json.load(f)
                 sources['markup'][json_path.stem] = markup_data
