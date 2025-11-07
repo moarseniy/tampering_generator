@@ -46,8 +46,6 @@ class DocumentForgeryGenerator(BaseForgeryGenerator):
         
         return image_path, mask_path
     
-    # Реализация apply_splicing_operation унаследована от BaseForgeryGenerator
-     
     def generate_dataset(self):
         """Генерация всего набора данных"""
         num_samples = self.config['generation']['num_samples']
