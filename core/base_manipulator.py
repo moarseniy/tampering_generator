@@ -83,6 +83,20 @@ class BaseForgeryGenerator:
             return self.splicing_ops.external_patch_insertion(image, markup, patch_image, patch_markup)
         elif chosen_op == 'internal_swap':
             return self.splicing_ops.internal_bbox_swap(image, markup)
+        elif chosen_op == 'inpaint_borders':
+            return self.splicing_ops.inpaint_borders(image, markup)
+        elif chosen_op == 'inpaint_random':
+            return self.splicing_ops.inpaint_random(image, markup)
+        elif chosen_op == 'random_patch_paste':
+            # Выбор источника: та же картинка или другая
+            op_cfg = self.config['splicing']['operations'].get('random_patch_paste', {})
+            same_image_prob = op_cfg.get('same_image_prob', 0.5)
+            if random.random() < same_image_prob:
+                source_image = image
+                source_markup = markup
+            else:
+                _, source_image, source_markup = self.get_random_source()
+            return self.splicing_ops.random_patch_copy_paste(image, markup, source_image, source_markup)
         
         return image, np.zeros(image.shape[:2], dtype=np.uint8)
     
