@@ -52,11 +52,16 @@ splicing:
       method: "telea"
 
     random_patch_paste:
-      enabled: true
+      enabled: false
       probability: 0.6
       same_image_prob: 0.5        # вероятность взять патч из той же картинки
       insert_into_bbox_prob: 0.6  # вероятность вставить патч в существующий bbox
       patch_size_range: [32, 256] # сторона/ширина патча источника (px)
+
+    digital_signature:
+      enabled: true
+      signature_cache_size: 50    # Количество предгенерированных подписей
+      random_position_prob: 1.0 
 
 # Настройки качества
 quality:

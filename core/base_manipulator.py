@@ -87,6 +87,8 @@ class BaseForgeryGenerator:
             return self.splicing_ops.inpaint_borders(image, markup)
         elif chosen_op == 'inpaint_random':
             return self.splicing_ops.inpaint_random(image, markup)
+        elif chosen_op == 'digital_signature':
+            return self.splicing_ops.digital_signature(image, markup)
         elif chosen_op == 'random_patch_paste':
             # Выбор источника: та же картинка или другая
             op_cfg = self.config['splicing']['operations'].get('random_patch_paste', {})

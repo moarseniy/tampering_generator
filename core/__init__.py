@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Dict, Tuple
 from .base_manipulator import BaseForgeryGenerator
 from .splicing_operations import SplicingOperations
-from .utils import save_forgery_result, ensure_directory
+from .digital_signature import DigitalSignatureGenerator
 
+from .utils import save_forgery_result, ensure_directory
 from .utils import (
     ensure_directory, 
     save_forgery_result, 
