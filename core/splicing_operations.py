@@ -109,6 +109,42 @@ class SplicingOperations:
         self.bbox_processor = BBoxProcessor()
         self.signature_generator = DigitalSignatureGenerator(config)
     
+    # В класс SplicingOperations добавьте:
+    def digital_signature_forgery(self, 
+                                base_image: np.ndarray, 
+                                base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Добавление цифровой подписи к документу
+        """
+        cfg = self.config['splicing']['operations'].get('digital_signature', {})
+        
+        if not cfg.get('enabled', True):
+            return base_image, np.zeros(base_image.shape[:2], dtype=np.uint8)
+        
+        # Определяем позицию для подписи
+        position = None
+        
+        if cfg['random_position_prob'] < random.random():
+            # Если есть bbox для подписей - используем их
+            if 'bboxes' in base_markup and base_markup['bboxes']:
+                signature_bboxes = [b for b in base_markup['bboxes'] 
+                                  if b.get('category') in ['signature', 'handwriting', 'text']]
+                
+                if signature_bboxes:
+                    chosen_bbox = random.choice(signature_bboxes)
+                    x, y, w, h = chosen_bbox['bbox']
+                    # Случайная позиция внутри bbox
+                    pos_x = x + random.randint(0, max(0, w - 50))
+                    pos_y = y + random.randint(0, max(0, h - 30))
+                    position = (pos_x, pos_y)
+        
+        # Применяем подпись
+        result_image, signature_mask = self.signature_generator.apply_signature_to_image(
+            base_image, position
+        )
+        
+        return result_image, signature_mask
+
     def digital_signature(self, 
                         base_image: np.ndarray, 
                         base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
