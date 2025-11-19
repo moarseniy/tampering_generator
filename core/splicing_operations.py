@@ -1,8 +1,104 @@
 import cv2
 import numpy as np
 import random
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 from .bbox_processor import BBoxProcessor
+
+# from simple_lama_inpainting import SimpleLama
+# from PIL import Image
+# simple_lama = SimpleLama()
+
+from lama import LaMa
+
+model = LaMa('cuda:0')
+
+def inpaint_with_lama3(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    # img_path = "image.png"
+    # mask_path = "mask.png"
+
+    # image = Image.open(img_path)
+    # mask = Image.open(mask_path).convert('L')
+    # print("AAAAAAAAAA")
+    # print(type(image), type(mask))
+    # # print(np.max(mask))
+    # image_temp = image.copy()
+    # mask_temp = mask.copy()
+
+    # print(image.shape, mask.shape)
+
+    result = model(image, mask)
+    result_np = np.array(result)
+
+    if result_np.shape != image.shape:
+        result_np = result_np[:image.shape[0], :image.shape[1]]
+
+    # print(np.array(result).shape, image.shape, mask.shape)
+    
+    # print(type(result), type(image), type(mask))
+
+    # result.save("/home/arseniy/python-dev/forensics/out.png")
+    
+    # result = cv2.cvtColor(np.array(result), cv2.COLOR_BGR2RGB)
+    
+    return result_np
+
+def inpaint_with_lama2(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+
+    
+
+    # img_path = "image.png"
+    # mask_path = "mask.png"
+
+    # image = Image.open(img_path)
+    # mask = Image.open(mask_path).convert('L')
+    # print("AAAAAAAAAA")
+    # print(type(image), type(mask))
+    # # print(np.max(mask))
+    # image_temp = image.copy()
+    # mask_temp = mask.copy()
+
+    # print(image.shape, mask.shape)
+
+    result = simple_lama(image, mask)
+    result_np = np.array(result)
+
+    if result_np.shape != image.shape:
+        result_np = result_np[:image.shape[0], :image.shape[1]]
+
+    # print(np.array(result).shape, image.shape, mask.shape)
+    
+    # print(type(result), type(image), type(mask))
+
+    # result.save("/home/arseniy/python-dev/forensics/out.png")
+    
+    # result = cv2.cvtColor(np.array(result), cv2.COLOR_BGR2RGB)
+    
+    return result_np
+
+def inpaint_with_lama(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """
+    Использование LaMa для высококачественного инпейнтинга
+    Устанавливается: pip install lama-cleaner
+    """
+    try:
+        from lama_cleaner import LaMa
+        
+        # Инициализация модели
+        model = LaMa(device='cuda' if torch.cuda.is_available() else 'cpu')
+        
+        # Преобразование в PIL для обработки
+        if isinstance(image, np.ndarray):
+            image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        if isinstance(mask, np.ndarray):
+            mask = Image.fromarray(mask)
+        
+        # Применение инпейнтинга
+        result = model(image, mask)
+        return cv2.cvtColor(np.array(result), cv2.COLOR_RGB2BGR)
+        
+    except Exception as e:
+        print(e)
+        return image
 
 class SplicingOperations:
     def __init__(self, sources: Dict, config):
@@ -10,6 +106,86 @@ class SplicingOperations:
         self.sources = sources
         self.bbox_processor = BBoxProcessor()
     
+
+    def heal_image_with_mask(
+        self,
+        image: np.ndarray, 
+        mask: np.ndarray,
+        sample_radius: int = 3,
+        opacity: float = 1.0,
+        blur_sigma: Optional[float] = None
+    ) -> np.ndarray:
+        """
+        Автоматическое залечивание изображения с использованием маски
+        комбинацией inpainting и Poisson blending
+        
+        Параметры:
+            image: исходное изображение (BGR или RGB)
+            mask: бинарная маска (белые области = что залечивать)
+            sample_radius: радиус для inpainting (чем больше, тем больше область анализа)
+            opacity: прозрачность наложения (0.0 - 1.0)
+            blur_sigma: sigma для размытия маски (None = авто расчет)
+        
+        Возвращает:
+            Обработанное изображение
+        """
+        if image is None or mask is None:
+            raise ValueError("Image and mask cannot be None")
+        
+        # Создаем копию изображения
+        result = image.copy()
+        
+        # Преобразуем маску если нужно
+        if len(mask.shape) == 3:
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        
+        # Создаем размытую маску для плавных переходов
+        if blur_sigma is None:
+            # Автоматический расчет sigma на основе размера маски
+            blur_sigma = max(mask.shape) * 0.01
+        
+        blurred_mask = cv2.GaussianBlur(mask, (0, 0), blur_sigma)
+        
+        # Применяем inpainting для генерации содержимого
+        inpainted_area = cv2.inpaint(
+            image, 
+            mask, 
+            sample_radius, 
+            cv2.INPAINT_TELEA
+        )
+        
+        # Находим центр маски для seamlessClone
+        moments = cv2.moments(mask)
+        if moments["m00"] != 0:
+            center_x = int(moments["m10"] / moments["m00"])
+            center_y = int(moments["m01"] / moments["m00"])
+        else:
+            # Если не можем найти центр, используем центр bounding rect
+            y, x = np.where(mask > 0)
+            center_x, center_y = int(np.mean(x)), int(np.mean(y))
+        
+        # Применяем Poisson blending для бесшовного смешивания
+        blended_result = cv2.seamlessClone(
+            inpainted_area,    # Сгенерированная область
+            image,             # Исходное изображение
+            blurred_mask,      # Размытая маска
+            (center_x, center_y),  # Центр области
+            cv2.NORMAL_CLONE   # Режим смешивания
+        )
+        
+        # Плавное наложение результата
+        if opacity == 1.0:
+            # Полная замена в области маски
+            result[mask > 0] = blended_result[mask > 0]
+        else:
+            # Линейная интерполяция
+            mask_normalized = blurred_mask / 255.0 * opacity
+            mask_3d = cv2.merge([mask_normalized, mask_normalized, mask_normalized])
+            
+            result = (blended_result * mask_3d + result * (1 - mask_3d)).astype(np.uint8)
+        
+        return result
+
     def _opencv_inpaint(self, image: np.ndarray, mask: np.ndarray, radius: int, method: str) -> np.ndarray:
         """Вспомогательный метод для вызова OpenCV inpaint."""
         inpaint_method = cv2.INPAINT_TELEA if method == 'telea' else cv2.INPAINT_NS
@@ -49,7 +225,9 @@ class SplicingOperations:
             bbox_mask = self.bbox_processor.create_bbox_mask((h, w), bbox)
             mask = np.maximum(mask, bbox_mask)
         
-        result_image = self._opencv_inpaint(base_image, mask, radius, method)
+        result_image = inpaint_with_lama3(base_image, mask)
+        # result_image = self.heal_image_with_mask(base_image, mask, sample_radius=5, opacity=0.8)
+        # result_image = self._opencv_inpaint(base_image, mask, radius, method)
         return result_image, mask
     
     def inpaint_random(self, base_image: np.ndarray, base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
@@ -140,7 +318,7 @@ class SplicingOperations:
             x_dst = random.randint(0, max_x_dst)
             y_dst = random.randint(0, max_y_dst)
             insert_bbox = {'bbox': [x_dst, y_dst, patch_w, patch_h]}
-            result_image = self.bbox_processor.paste_bbox_region(base_image, patch_region, insert_bbox, resize=False)
+            result_image = self.bbox_processor.paste_bbox_region(base_image, patch_region, insert_bbox, resize=True)
             mask = self.bbox_processor.create_bbox_mask((h_dst, w_dst), insert_bbox)
         
         return result_image, mask
