@@ -35,12 +35,16 @@ splicing:
       probability: 0.5
     
     inpaint_borders:
-      enabled: false
+      enabled: true
       probability: 0.4
       num_bboxes: [1, 3]         # выбрать N случайных bbox из разметки
       allowed_categories: []     # пустой список = любые категории
-      radius: 10                  # радиус inpaint
+      radius: 5                  # радиус inpaint
       method: "telea"            # telea | ns
+      mode: "text"  # или "text"
+      font: "resources/TTF/DejaVuSansMono.ttf"
+      text_min_len: 5
+      text_max_len: 20
     
     inpaint_random:
       enabled: false
@@ -59,7 +63,8 @@ splicing:
       patch_size_range: [32, 256] # сторона/ширина патча источника (px)
 
     digital_signature:
-      enabled: true
+      enabled: false
+      probability: 0.3
       random_position_prob: 1.0         # Вер-ть генерировать не в боксе разметки
       signature_width: [200, 450]       # Ширина генерируемых подписей
       signature_height: [80, 220]      # Высота генерируемых подписей

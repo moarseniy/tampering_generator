@@ -3,6 +3,7 @@ import numpy as np
 import random
 from typing import Dict, Tuple, List, Optional
 from .bbox_processor import BBoxProcessor
+from .text_printing_utils import random_text, render_text_into_bbox
 
 # from simple_lama_inpainting import SimpleLama
 # from PIL import Image
@@ -234,39 +235,62 @@ class SplicingOperations:
     
     def inpaint_borders(self, base_image: np.ndarray, base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Инпейнтинг по bboxes из разметки (аналогично выбору областей в bbox_swap).
-        Выбирает один или несколько bbox и «закрашивает» содержимое через cv2.inpaint.
+        Если mode == "text": вписываем текст в bbox.
+        Если mode == "inpaint": заполняем bbox через cv2.inpaint.
         """
         h, w = base_image.shape[:2]
         cfg = self.config['splicing']['operations'].get('inpaint_borders', {})
+        mode = cfg.get("mode", "inpaint")  # "inpaint" или "text"
+
         radius = cfg.get('radius', 3)
         method = cfg.get('method', 'telea')
-        num_bboxes_cfg = cfg.get('num_bboxes', [1, 1])  # [min, max]
-        allowed_categories = cfg.get('allowed_categories', None)  # например: ["text", "date"]
-        
+
+        num_bboxes_cfg = cfg.get('num_bboxes', [1, 1])
+        allowed_categories = cfg.get('allowed_categories', None)
+
         if 'bboxes' not in base_markup or not base_markup['bboxes']:
             return base_image, np.zeros((h, w), dtype=np.uint8)
-        
-        # Фильтруем по категориям при необходимости
+
         bboxes = base_markup['bboxes']
         if allowed_categories:
             bboxes = [b for b in bboxes if b.get('category', 'text') in allowed_categories]
         if not bboxes:
             return base_image, np.zeros((h, w), dtype=np.uint8)
-        
+
         min_k, max_k = max(1, num_bboxes_cfg[0]), max(1, num_bboxes_cfg[1])
         k = random.randint(min_k, min(max_k, len(bboxes)))
         chosen_bboxes = random.sample(bboxes, k) if len(bboxes) > k else bboxes
-        
+
         mask = np.zeros((h, w), dtype=np.uint8)
+
+        if mode == "text":
+            # alphabet = load_alphabet(cfg["alphabet_path"])
+            alphabet = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+
+            font_path = cfg["font"]
+            min_len = cfg.get("text_min_len", 5)
+            max_len = cfg.get("text_max_len", 15)
+
+            result = base_image.copy()
+
+            for bbox in chosen_bboxes:
+                text = random_text(alphabet, min_len=min_len, max_len=max_len)
+                print(bbox)
+                result = render_text_into_bbox(result, text, bbox['bbox'], font_path)
+
+                # маска = область бокса
+                bbox_mask = self.bbox_processor.create_bbox_mask((h, w), bbox)
+                mask = np.maximum(mask, bbox_mask)
+
+            return result, mask
+
         for bbox in chosen_bboxes:
             bbox_mask = self.bbox_processor.create_bbox_mask((h, w), bbox)
             mask = np.maximum(mask, bbox_mask)
-        
-        result_image = inpaint_with_lama3(base_image, mask)
-        # result_image = self.heal_image_with_mask(base_image, mask, sample_radius=5, opacity=0.8)
-        # result_image = self._opencv_inpaint(base_image, mask, radius, method)
+
+        result_image = self._opencv_inpaint(base_image, mask, radius, method)
         return result_image, mask
+
     
     def inpaint_random(self, base_image: np.ndarray, base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
         """
