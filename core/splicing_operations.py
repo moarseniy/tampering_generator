@@ -110,9 +110,9 @@ class SplicingOperations:
         self.signature_generator = DigitalSignatureGenerator(config)
     
     # В класс SplicingOperations добавьте:
-    def digital_signature_forgery(self, 
-                                base_image: np.ndarray, 
-                                base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
+    def digital_signature(self, 
+                        base_image: np.ndarray, 
+                        base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
         """
         Добавление цифровой подписи к документу
         """
@@ -140,46 +140,7 @@ class SplicingOperations:
         
         # Применяем подпись
         result_image, signature_mask = self.signature_generator.apply_signature_to_image(
-            base_image, position
-        )
-        
-        return result_image, signature_mask
-
-    def digital_signature(self, 
-                        base_image: np.ndarray, 
-                        base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Добавление цифровой подписи к документу
-        
-        Args:
-            base_image: исходное изображение документа
-            base_markup: разметка документа
-        
-        Returns:
-            image_with_signature: документ с подписью
-            signature_mask: маска области подписи
-        """
-        cfg = self.config['splicing']['operations'].get('digital_signature', {})
-        
-        # Определяем позицию для подписи
-        position = None
-        
-        # Если есть bbox для подписей - используем их
-        
-        if cfg['random_position_prob'] < random.random():
-            if 'bboxes' in base_markup and base_markup['bboxes']:
-                signature_bboxes = [b for b in base_markup['bboxes'] 
-                                  if b.get('category') in ['signature', 'handwriting']]
-                
-                if signature_bboxes:
-                    chosen_bbox = random.choice(signature_bboxes)
-                    x, y, w, h = chosen_bbox['bbox']
-                    # Центрируем подпись в bbox
-                    position = (x + w//4, y + h//4)
-        
-        # Применяем подпись
-        result_image, signature_mask = self.signature_generator.apply_signature_to_image(
-            base_image, position
+            base_image, position, 
         )
         
         return result_image, signature_mask
