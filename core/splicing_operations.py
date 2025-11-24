@@ -107,7 +107,7 @@ class SplicingOperations:
         self.config = config
         self.sources = sources
         self.bbox_processor = BBoxProcessor()
-        self.signature_generator = DigitalSignatureGenerator(config)
+        self.signature_generator = DigitalSignatureGenerator(self.config['splicing']['operations'].get('digital_signature', {}))
     
     # В класс SplicingOperations добавьте:
     def digital_signature(self, 

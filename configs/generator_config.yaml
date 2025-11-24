@@ -61,8 +61,8 @@ splicing:
     digital_signature:
       enabled: true
       random_position_prob: 1.0         # Вер-ть генерировать не в боксе разметки
-      signature_width: [400, 400]       # Ширина генерируемых подписей
-      signature_height: [120, 120]      # Высота генерируемых подписей
+      signature_width: [200, 450]       # Ширина генерируемых подписей
+      signature_height: [80, 220]      # Высота генерируемых подписей
       scale_range: [0.7, 1.3]           # Диапазон масштабирования при вставке
       
       style_ranges:

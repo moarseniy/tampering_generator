@@ -368,8 +368,16 @@ class DigitalSignatureGenerator:
         # sample style values and generate signature
         style_override = style_ranges_override or None
 
-        sig_bgra, sig_mask = self.generate_signature(width=self.config.get("signature_width", 400),
-                                                     height=self.config.get("signature_height", 120),
+        w_cfg = self.config.get("signature_width", [400, 400])
+        h_cfg = self.config.get("signature_height", [120, 120])
+
+        # print(self.config)
+        
+        w_signature = int(random.uniform(w_cfg[0], w_cfg[1]))
+        h_signature = int(random.uniform(h_cfg[0], h_cfg[1]))
+
+        sig_bgra, sig_mask = self.generate_signature(width=w_signature,
+                                                     height=h_signature,
                                                      style_override=style_override['style_ranges'])
         sig_h, sig_w = sig_mask.shape
 
