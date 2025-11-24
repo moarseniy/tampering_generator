@@ -140,7 +140,7 @@ class SplicingOperations:
         
         # Применяем подпись
         result_image, signature_mask = self.signature_generator.apply_signature_to_image(
-            base_image, position, 
+            base_image, position, cfg
         )
         
         return result_image, signature_mask

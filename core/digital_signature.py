@@ -1,145 +1,64 @@
 # core/digital_signature.py
 """
-Генератор реалистичных подписей.
-Каждая подпись создаётся уникально при вызове — кэша нет.
-
-Основные возможности:
-- Предустановленные стили (mouse_basic, mouse_smooth, mouse_rapid, pen_clean, pen_pressure, scribble)
-- Регистрация и установка пользовательских стилей
-- Передача style_override в apply_signature_to_image для разового переопределения
-- Реалистичные эффекты: jitter (дрожание), hand-lift (разрывы), variable sampling (скорость движения),
-  минимальная/максимальная толщина, антиалиасинг (super-sampling), сглаживание
-- Возвращает BGRA-подпись и бинарную маску, а при применении — blended BGR изображение и маску
+Генератор реалистичных подписей — каждый вызов уникален.
+Параметры генерации задаются единым набором диапазонов (style_ranges) в конфиге.
 """
 
 import random
-import hashlib
-from typing import Tuple, Optional, Dict, Any, List, Union
+from typing import Tuple, Optional, Dict, Any, List
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 import cv2
 
 # -----------------------------
-# PREDEFINED STYLES
+# Helpers: сэмплинг из диапазонов
 # -----------------------------
-PREDEFINED_STYLES: Dict[str, Dict[str, Any]] = {
-    # Мышиный базовый — резкая, с сильной дрожью, без имитации давления (фигня в крапинку)
-    "mouse_basic": {
-        "antialias_scale": 1,
-        "smoothing": 0.0,
-        "stroke_thickness_range": [2, 3],
-        "pressure_variation": False,
-        "jitter_intensity": 4.0,   # пиксели
-        "jitter_frequency": 0.9,   # вероятность применить шум в точке
-        "steps_per_stroke": 140,
-        "hand_lift_chance": 0.15,   # шанс разрыва в штрихе
-        "hand_lift_max_segments": 3,
-        "ink_color": (0, 0, 0),
-        "opacity": 1.0,
-        "splat_chance": 0.0,
-        "extra_small_strokes_prob": 0.02
-    },
-    # Мышиный аккуратный — немного сглаженный, слабая дрожь (ну норм, есть толстые)
-    "mouse_smooth": {
-        "antialias_scale": 1,
-        "smoothing": 0.6,
-        "stroke_thickness_range": [2, 3],
-        "pressure_variation": False,
-        "jitter_intensity": 1.0,
-        "jitter_frequency": 0.4,
-        "steps_per_stroke": 200,
-        "hand_lift_chance": 0.08,
-        "hand_lift_max_segments": 2,
-        "ink_color": (20, 20, 20),
-        "opacity": 0.95,
-        "splat_chance": 0.0,
-        "extra_small_strokes_prob": 0.02
-    },
-    # Мышиный быстрый — резкие скачки, высокая дискретизация, синий оттенок (фигня в синюю крапинку)
-    "mouse_rapid": {
-        "antialias_scale": 1,
-        "smoothing": 0.0,
-        "stroke_thickness_range": [2, 4],
-        "pressure_variation": False,
-        "jitter_intensity": 5.0,
-        "jitter_frequency": 0.95,
-        "steps_per_stroke": 120,
-        "hand_lift_chance": 0.25,
-        "hand_lift_max_segments": 4,
-        "ink_color": (0, 0, 80),
-        "opacity": 1.0,
-        "splat_chance": 0.0,
-        "extra_small_strokes_prob": 0.08
-    },
-    # Чистая ручка (перьевая/стилус) — плавная с вариацией давления (базовый тонкий вариант)
-    "pen_clean": {
-        "antialias_scale": 2,
-        "smoothing": 1.0,
-        "stroke_thickness_range": [1, 3],
-        "pressure_variation": True,
-        "jitter_intensity": 0.6,
-        "jitter_frequency": 0.25,
-        "steps_per_stroke": 260,
-        "hand_lift_chance": 0.05,
-        "ink_color": (10, 10, 10),
-        "opacity": 0.98,
-        "splat_chance": 0.05,
-        "extra_small_strokes_prob": 0.25
-    },
-    # Ручка с вариацией давления (таблетка/граф. планшет) жирные линии с точками норм
-    "pen_pressure": {
-        "antialias_scale": 2,
-        "smoothing": 1.2,
-        "stroke_thickness_range": [1, 6],
-        "pressure_variation": True,
-        "jitter_intensity": 0.8,
-        "jitter_frequency": 0.2,
-        "steps_per_stroke": 300,
-        "hand_lift_chance": 0.07,
-        "ink_color": (0, 0, 0),
-        "opacity": 1.0,
-        "splat_chance": 0.12,
-        "extra_small_strokes_prob": 0.35
-    },
-    # Каракуля/scribble — сильная неряшливость, много мелких штрихов (каракули и грязь + точки штрихи)
-    "scribble": {
-        "antialias_scale": 1,
-        "smoothing": 0.0,
-        "stroke_thickness_range": [1, 3],
-        "pressure_variation": False,
-        "jitter_intensity": 3.0,
-        "jitter_frequency": 0.8,
-        "steps_per_stroke": 120,
-        "hand_lift_chance": 0.35,
-        "hand_lift_max_segments": 6,
-        "ink_color": (0, 0, 0),
-        "opacity": 1.0,
-        "splat_chance": 0.05,
-        "extra_small_strokes_prob": 0.6
-    },
-    "paint_pencil": {
-        "antialias_scale": 1,            # Paint-карандаш почти без сглаживания
-        "smoothing": 0.0,               # чуть-чуть, чтобы линии были менее пиксельные
-        "stroke_thickness_range": [1, 1],  # карандаш тонкий
-        "pressure_variation": False,     # в Paint карандаш постоянной толщины
-        "jitter_intensity": 0.6,         # легкая дрожь, как у мышки
-        "jitter_frequency": 0.45,        # не на каждой точке, но часто
-        "steps_per_stroke": 400,         # более плавные ходы, меньше рваностей
-        "hand_lift_chance": 0.0,        # иногда прерывает линию — поведение Paint
-        "hand_lift_max_segments": 0,     # не слишком часто
-        "ink_color": (0, 0, 0),       # серый карандашный цвет (не чёрный!)
-        "opacity": 1.0,                 # лёгкая прозрачность, как графит
-        "splat_chance": 0.0,             # никаких клякс — карандаш не делает брызги
-        "extra_small_strokes_prob": 0.0 # совсем немного дополнительных штрихов
-    }
-}
+def _sample_scalar(val):
+    """Если val — [min,max] — вернуть uniform(min,max). Иначе вернуть val (скаляр)."""
+    if isinstance(val, (list, tuple)) and len(val) == 2:
+        a, b = val
+        # если целые — вернуть int
+        if isinstance(a, int) and isinstance(b, int):
+            return random.randint(int(a), int(b))
+        else:
+            return float(random.uniform(float(a), float(b)))
+    return val
+
+
+def _sample_int_range(maybe_range):
+    """Ожидает либо список [min,max], либо одно число, возвращает tuple(min,max) ints."""
+    if isinstance(maybe_range, (list, tuple)) and len(maybe_range) == 2:
+        return int(maybe_range[0]), int(maybe_range[1])
+    elif isinstance(maybe_range, int):
+        return int(maybe_range), int(maybe_range)
+    else:
+        # fallback
+        return 1, 3
+
+
+def _sample_color(ink_color_range, default=(0, 0, 0)):
+    """
+    ink_color_range: [[rmin,rmax],[gmin,gmax],[bmin,bmax]] либо фиксированный кортеж.
+    """
+    if isinstance(ink_color_range, (list, tuple)) and len(ink_color_range) == 3:
+        r_rng, g_rng, b_rng = ink_color_range
+        r = int(random.randint(int(r_rng[0]), int(r_rng[1])))
+        g = int(random.randint(int(g_rng[0]), int(g_rng[1])))
+        b = int(random.randint(int(b_rng[0]), int(b_rng[1])))
+        return (r, g, b)
+    if isinstance(ink_color_range, (list, tuple)) and len(ink_color_range) == 2 and isinstance(ink_color_range[0], int):
+        # случай: [min, max] -> градация серого
+        v = int(random.randint(int(ink_color_range[0]), int(ink_color_range[1])))
+        return (v, v, v)
+    if isinstance(ink_color_range, tuple) and len(ink_color_range) == 3:
+        return ink_color_range
+    return default
 
 
 # -----------------------------
-# HELPERS
+# Bézier и рисование
 # -----------------------------
-def _random_control_points(width: int, height: int, complexity: float = 1.0) -> np.ndarray:
-    """Генерация 4 контрольных точек (кубический Безье)"""
+def _random_control_points(width: int, height: int, complexity: float = 1.0):
     margin_x = max(1, int(width * 0.03))
     margin_y = max(1, int(height * 0.08))
     p0 = [random.randint(margin_x, max(margin_x + 1, width // 8)), random.randint(height // 4, 3 * height // 4)]
@@ -150,21 +69,14 @@ def _random_control_points(width: int, height: int, complexity: float = 1.0) -> 
 
 
 def _bezier_points(points: np.ndarray, steps: int, variable_sampling: bool = True) -> np.ndarray:
-    """
-    Возвращает набор точек вдоль кубического Безье.
-    variable_sampling: делает распределение t неравномерным, имитируя изменение скорости.
-    """
     if not variable_sampling:
         t = np.linspace(0.0, 1.0, steps)
     else:
-        # создаём базовый равномерный т и затем искажает его: более короткие интервалы (медленнее) и длинные (быстрее)
         base = np.linspace(0.0, 1.0, steps * 3)
-        # random warping: применяем случайный нелинейный warp через cumulative sum
         noise = np.random.normal(scale=0.6, size=base.shape)
         weights = np.abs(noise) + 0.1
         cum = np.cumsum(weights)
         cum = (cum - cum.min()) / (cum.max() - cum.min())
-        # подвыбор для требуемого числа точек (убираем дубли)
         idx = np.linspace(0, len(cum) - 1, steps).astype(int)
         t = cum[idx]
     p0, p1, p2, p3 = points
@@ -174,10 +86,9 @@ def _bezier_points(points: np.ndarray, steps: int, variable_sampling: bool = Tru
 
 
 def _add_ink_splat(draw: ImageDraw.ImageDraw, x: int, y: int, size: int) -> None:
-    """Рисуем пятно и несколько разбрызгиваний"""
     bbox = [x - size, y - size, x + size, y + size]
     draw.ellipse(bbox, fill=0)
-    for _ in range(random.randint(2, 6)):
+    for _ in range(random.randint(2, 5)):
         rx = x + random.randint(-size, size)
         ry = y + random.randint(-size, size)
         r = random.randint(1, max(1, size // 4))
@@ -185,51 +96,42 @@ def _add_ink_splat(draw: ImageDraw.ImageDraw, x: int, y: int, size: int) -> None
 
 
 # -----------------------------
-# CORE: generate_realistic_signature
+# generate_realistic_signature (старая логика, но использует style dict)
 # -----------------------------
 def generate_realistic_signature(width: int = 400,
                                  height: int = 120,
-                                 style: Optional[Dict[str, Any]] = None
-                                 ) -> Tuple[np.ndarray, np.ndarray]:
+                                 style: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Генерирует уникальную подпись и маску для данного стиля.
-
-    Возвращает:
-      signature_bgra: numpy.ndarray (H,W,4) — B,G,R,Alpha
-      mask: numpy.ndarray (H,W) uint8 — бинарная маска чернил (0/255)
-    style: словарь опций (см. PREDEFINED_STYLES)
+    Генерация подписи, style — словарь с конкретными значениями (не диапазонами).
     """
-    # базовые значения (шляпа)
-    cfg: Dict[str, Any] = {
-        "num_strokes_range": [2, 5],
-        "stroke_thickness_range": [2, 5],
-        "pressure_variation": True,
+    cfg = {
+        "num_strokes_range": [2, 4],
+        "stroke_thickness_range": [1, 1],
+        "pressure_variation": False,
+        "antialias_scale": 1,
+        "smoothing": 0.0,
+        "pressure_variation": False,
+        "jitter_intensity": 0.6,
+        "jitter_frequency": 0.45,
+        "steps_per_stroke": 400,
+        "hand_lift_chance": 0.0,
+        "hand_lift_max_segments": 0,
         "ink_color": (0, 0, 0),
         "opacity": 1.0,
-        "antialias_scale": 2,
-        "smoothing": 0.8,
-        "jitter_intensity": 1.0,
-        "jitter_frequency": 0.3,
-        "steps_per_stroke": 220,
-        "hand_lift_chance": 0.1,
-        "hand_lift_max_segments": 3,
-        "splat_chance": 0.1,
-        "splat_size_range": [6, 18],
-        "extra_small_strokes_prob": 0.25,
+        "splat_chance": 0.0,
+        "extra_small_strokes_prob": 0.0,
         "variable_sampling": True,
         "seed": None
     }
 
-    style = PREDEFINED_STYLES['paint_pencil']#['mouse_rapid']
     if style:
         cfg.update(style)
 
-    # reproducibility optional
     if cfg.get("seed") is not None:
         random.seed(cfg["seed"])
         np.random.seed(cfg["seed"])
 
-    scale = max(1, int(cfg.get("antialias_scale", 2)))
+    scale = max(1, int(cfg.get("antialias_scale", 1)))
     W, H = width * scale, height * scale
     img = Image.new("L", (W, H), 255)
     draw = ImageDraw.Draw(img)
@@ -238,13 +140,13 @@ def generate_realistic_signature(width: int = 400,
 
     for stroke_idx in range(num_strokes):
         points = _random_control_points(W, H, complexity=1.0 + random.random() * 0.6)
-        pts = _bezier_points(points, steps=int(cfg["steps_per_stroke"]), variable_sampling=cfg.get("variable_sampling", True))
+        pts = _bezier_points(points, steps=int(cfg["steps_per_stroke"]), variable_sampling=bool(cfg["variable_sampling"]))
 
-        # Имитация hand-lift: разобьём pts на несколько сегментов (с шансом)
+        # hand-lift segmentation
         segments = [(0, len(pts))]
         if random.random() < float(cfg.get("hand_lift_chance", 0.0)):
-            max_seg = int(cfg.get("hand_lift_max_segments", 3))
-            n_seg = random.randint(2, max_seg)
+            max_seg = int(cfg.get("hand_lift_max_segments", 2))
+            n_seg = random.randint(1, max_seg)
             indices = sorted(random.sample(range(1, len(pts) - 1), n_seg - 1))
             segs = []
             prev = 0
@@ -254,63 +156,59 @@ def generate_realistic_signature(width: int = 400,
             segs.append((prev, len(pts)))
             segments = segs
 
-        # основная толщина
-        base_thickness = random.randint(int(cfg["stroke_thickness_range"][0] * scale),
-                                        int(cfg["stroke_thickness_range"][1] * scale))
-        pressure_variation = bool(cfg.get("pressure_variation", True))
-        jitter_intensity = float(cfg.get("jitter_intensity", 1.0)) * scale
-        jitter_freq = float(cfg.get("jitter_frequency", 0.3))
+        base_thickness_min, base_thickness_max = _sample_int_range(cfg.get("stroke_thickness_range", [1, 3]))
+        pressure_variation = bool(cfg.get("pressure_variation", False))
+        jitter_intensity = float(cfg.get("jitter_intensity", 0.0)) * scale
+        jitter_freq = float(cfg.get("jitter_frequency", 0.0))
 
-        for seg_idx, (s_start, s_end) in enumerate(segments):
-            # пропускаем небольшой gap между сегментами (hand lift) — не рисуем переход
+        for (s_start, s_end) in segments:
             seg_pts = pts[s_start:s_end]
             if seg_pts.shape[0] < 2:
                 continue
 
-            # jitter: добавляем шум по точкам с вероятностью jitter_freq
+            # jitter: добавить шум с вероятностью
             if jitter_intensity > 0:
-                noise_mask = np.random.rand(*seg_pts.shape[:1]) < jitter_freq
+                mask = np.random.rand(seg_pts.shape[0]) < jitter_freq
                 noise = np.zeros_like(seg_pts)
-                noise[noise_mask] = np.random.normal(scale=jitter_intensity, size=(noise_mask.sum(), 2))
+                noise[mask] = np.random.normal(scale=jitter_intensity, size=(mask.sum(), 2))
                 seg_pts = seg_pts + noise
 
+            # draw points as overlapping circles
             for i, (px, py) in enumerate(seg_pts.astype(int)):
                 t = i / max(1, (len(seg_pts) - 1))
                 if pressure_variation:
-                    # имитация легкой вариации давления
                     pressure = 0.7 + 0.6 * (0.5 + 0.5 * np.sin(2 * np.pi * (t + random.random() * 0.2)))
                 else:
                     pressure = 1.0
+                base_thickness = random.randint(base_thickness_min, base_thickness_max)
                 r = max(1, int(base_thickness * (0.6 + 0.8 * pressure)))
                 draw.ellipse([px - r, py - r, px + r, py + r], fill=0)
 
-            # иногда добавляем маленькие вспомогательные штрихи внутри сегмента
-            if random.random() < float(cfg.get("extra_small_strokes_prob", 0.25)):
-                extra_steps = random.randint(20, 80)
-                extra_points = _bezier_points(_random_control_points(W, H, complexity=0.5), steps=extra_steps,
-                                              variable_sampling=False)
+            # extra small strokes
+            if random.random() < float(cfg.get("extra_small_strokes_prob", 0.0)):
+                extra_steps = random.randint(20, 70)
+                extra_points = _bezier_points(_random_control_points(W, H, complexity=0.5), steps=extra_steps, variable_sampling=False)
                 for (px, py) in extra_points.astype(int):
-                    rr = max(1, int(base_thickness * 0.3))
+                    rr = max(1, int((base_thickness_min + base_thickness_max) / 4.0))
                     draw.ellipse([px - rr, py - rr, px + rr, py + rr], fill=0)
 
-        # иногда пятна чернил
+        # splat
         if random.random() < float(cfg.get("splat_chance", 0.0)):
             mid_idx = len(pts) // 2 + random.randint(-8, 8)
             mx, my = pts[mid_idx].astype(int)
-            spl_min, spl_max = cfg.get("splat_size_range", [6, 18])
-            _add_ink_splat(draw, mx, my, random.randint(int(spl_min * scale), int(spl_max * scale)))
+            smin, smax = cfg.get("splat_size_range", [4, 10])
+            _add_ink_splat(draw, mx, my, random.randint(int(smin * scale), int(smax * scale)))
 
-    # Сглаживание (Gaussian blur) для антиалиасинга
+    # blur + downsample
     blur_radius = float(cfg.get("smoothing", 0.0)) * scale
     if blur_radius > 0:
         img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
 
-    # Суперсемплинг назад
     img_small = img.resize((width, height), resample=Image.LANCZOS) if scale > 1 else img
     signature_gray = np.array(img_small)
     mask = (255 - signature_gray).clip(0, 255).astype(np.uint8)
 
-    # BGRA составление (цвет + альфа)
+    # color + alpha
     ink_rgb = tuple(int(c) for c in cfg.get("ink_color", (0, 0, 0)))
     opacity = float(cfg.get("opacity", 1.0))
     h, w = mask.shape
@@ -324,104 +222,145 @@ def generate_realistic_signature(width: int = 400,
 
 
 # -----------------------------
-# DigitalSignatureGenerator (без кэша)
+# DigitalSignatureGenerator: новый API (без кэша)
 # -----------------------------
 class DigitalSignatureGenerator:
-    """
-    Генератор подписей без кэширования — каждая подпись уникальна.
-    Использование:
-      gen = DigitalSignatureGenerator(config)
-      gen.set_style('mouse_basic')  # или gen.set_style(dict)
-      res_img, mask = gen.apply_signature_to_image(image, position=(x,y), style_override=...)
-    """
-
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        config keys:
+          - signature_width, signature_height
+          - style_ranges: словарь диапазонов
+          - scale_range: [min,max] — масштаб подписи при вставке
+        """
         self.config: Dict[str, Any] = config.copy() if config else {}
-        # реестр стилей
-        self._styles: Dict[str, Dict[str, Any]] = PREDEFINED_STYLES.copy()
-        # активный стиль — имя или dict
-        default = self.config.get("default_style", "mouse_basic")
-        self.active_style_name: Optional[str] = None
-        self.active_style: Optional[Dict[str, Any]] = None
-        self.set_style(default)
+        self.style_ranges: Dict[str, Any] = self.config.get("style_ranges", {})
+        # опционально можно фиксировать seed для воспроизводимости
+        self.global_seed = self.config.get("seed", None)
 
-    # ---- стиль API ----
-    def register_style(self, name: str, style: Dict[str, Any]) -> None:
-        """Зарегистрировать или перезаписать пресет стиля"""
-        if not isinstance(name, str):
-            raise TypeError("Style name must be str")
-        self._styles[name] = style.copy()
-
-    def set_style(self, name_or_style: Optional[Union[str, Dict[str, Any]]]) -> None:
+    def _sample_style_once(self, override: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Установить активный стиль:
-         - строка: имя зарегистрированного пресета
-         - dict: inline-стиль
-         - None: сброс на default из config или 'mouse_basic'
+        Берёт style_ranges (self.style_ranges), применяет override (диапазоны переопределяются),
+        и возвращает словарь style с конкретными значениями (не диапазонами).
         """
-        if isinstance(name_or_style, str):
-            if name_or_style not in self._styles:
-                raise ValueError(f"Style '{name_or_style}' not found")
-            self.active_style_name = name_or_style
-            self.active_style = self._styles[name_or_style].copy()
-        elif isinstance(name_or_style, dict):
-            self.active_style_name = None
-            self.active_style = name_or_style.copy()
-        elif name_or_style is None:
-            ds = self.config.get("default_style", "mouse_basic")
-            if isinstance(ds, str) and ds in self._styles:
-                self.active_style_name = ds
-                self.active_style = self._styles[ds].copy()
-            elif isinstance(ds, dict):
-                self.active_style_name = None
-                self.active_style = ds.copy()
-            else:
-                self.active_style_name = "mouse_basic"
-                self.active_style = self._styles["mouse_basic"].copy()
+        if override:
+            # merge shallow: override keys replace ranges
+            merged = {**self.style_ranges, **override}
         else:
-            raise TypeError("set_style expects str, dict or None")
+            merged = dict(self.style_ranges)
 
-    def get_style(self) -> Dict[str, Any]:
-        """Возвращает текущий активный стиль (словарь)"""
-        return self.active_style.copy() if self.active_style else {}
+        # если глобальный seed задан — каждый вызов можно сдвигать seed чтобы не было одинаковых
+        if self.global_seed is not None:
+            # меняем локальный RNG состояние (не глобально) для reproducibility per call
+            random.seed(self.global_seed + random.randint(0, 10_000_000))
+            np.random.seed(self.global_seed + random.randint(0, 10_000_000))
 
-    # ---- генерация и применение ----
-    def generate_signature(self,
-                           width: Optional[int] = None,
-                           height: Optional[int] = None,
-                           style_override: Optional[Dict[str, Any]] = None
-                           ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Сгенерировать уникальную подпись (BGRA, mask).
-        width/height берутся из config если не заданы.
-        """
+        style: Dict[str, Any] = {}
+
+        # num_strokes_range (если задан диапазон, сэмплим int в этом диапазоне и так же сохраняем диапазер для генератора)
+        nsr = merged.get("num_strokes_range", [2, 4])
+        if isinstance(nsr, (list, tuple)) and len(nsr) == 2:
+            style["num_strokes_range"] = [int(nsr[0]), int(nsr[1])]
+        else:
+            style["num_strokes_range"] = nsr
+
+        # stroke_thickness_range передаём как есть (пользователь указывает два числа)
+        style["stroke_thickness_range"] = merged.get("stroke_thickness_range", [1, 3])
+
+        # pressure_variation: либо probability поле, либо фикс
+        pprob = merged.get("pressure_variation_prob", None)
+        if pprob is None:
+            style["pressure_variation"] = bool(merged.get("pressure_variation", False))
+        else:
+            # если probability — сэмплим
+            if isinstance(pprob, (list, tuple)):
+                prob = float(random.uniform(float(pprob[0]), float(pprob[1])))
+            else:
+                prob = float(pprob)
+            style["pressure_variation"] = random.random() < prob
+
+        # antialias_scale (int)
+        aas = merged.get("antialias_scale", [1, 2])
+        style["antialias_scale"] = int(_sample_scalar(aas))
+
+        # smoothing
+        style["smoothing"] = float(_sample_scalar(merged.get("smoothing", [0.0, 0.5])))
+
+        # jitter intensity & freq
+        style["jitter_intensity"] = float(_sample_scalar(merged.get("jitter_intensity", [0.0, 1.0])))
+        style["jitter_frequency"] = float(_sample_scalar(merged.get("jitter_frequency", [0.0, 1.0])))
+
+        # steps_per_stroke
+        style["steps_per_stroke"] = int(_sample_scalar(merged.get("steps_per_stroke", [120, 220])))
+
+        # hand_lift
+        style["hand_lift_chance"] = float(_sample_scalar(merged.get("hand_lift_chance", [0.0, 0.1])))
+        style["hand_lift_max_segments"] = int(_sample_scalar(merged.get("hand_lift_max_segments", [1, 2])))
+
+        # ink color: support fixed ink_color or ink_color_range
+        if "ink_color" in merged:
+            style["ink_color"] = merged["ink_color"]
+        else:
+            style["ink_color"] = _sample_color(merged.get("ink_color_range", None), default=(0, 0, 0))
+
+        # opacity
+        style["opacity"] = float(_sample_scalar(merged.get("opacity", [0.8, 1.0])))
+
+        # splat
+        style["splat_chance"] = float(_sample_scalar(merged.get("splat_chance", [0.0, 0.05])))
+        # splat_size_range can be either [min,max] or [[min,max],[min,max]]; normalize to [min,max]
+        ssr = merged.get("splat_size_range", [4, 10])
+        if isinstance(ssr, (list, tuple)) and len(ssr) == 2 and isinstance(ssr[0], (int, float)):
+            style["splat_size_range"] = [int(ssr[0]), int(ssr[1])]
+        elif isinstance(ssr, (list, tuple)) and len(ssr) == 2 and isinstance(ssr[0], (list, tuple)):
+            # take first pair's min and second pair's max as fallback
+            style["splat_size_range"] = [int(ssr[0][0]), int(ssr[1][1])]
+        else:
+            style["splat_size_range"] = [4, 10]
+
+        style["extra_small_strokes_prob"] = float(_sample_scalar(merged.get("extra_small_strokes_prob", [0.0, 0.05])))
+
+        # variable_sampling as bool sampled from probability
+        vsp = merged.get("variable_sampling_prob", 1.0)
+        if isinstance(vsp, (list, tuple)) and len(vsp) == 2:
+            prob = float(random.uniform(float(vsp[0]), float(vsp[1])))
+        else:
+            prob = float(vsp)
+        style["variable_sampling"] = random.random() < prob
+
+        # seed optional (if provided as fixed number)
+        style["seed"] = merged.get("seed", None)
+
+        return style
+
+    # API: генерировать подпись и сразу применить
+    def generate_signature(self, width: Optional[int] = None, height: Optional[int] = None,
+                           style_override: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, np.ndarray]:
         w = int(width or self.config.get("signature_width", 400))
         h = int(height or self.config.get("signature_height", 120))
-        style = self.get_style()
-        if style_override:
-            style = {**style, **style_override}
+        style = self._sample_style_once(style_override)
+        # преобразуем некоторые поля в формат, ожидаемый генератором
+        # например: num_strokes_range уже готов, stroke_thickness_range уже готов, ink_color, opacity и т.д.
         return generate_realistic_signature(w, h, style)
 
-    def apply_signature_to_image(self,
-                                 image: np.ndarray,
+    def apply_signature_to_image(self, image: np.ndarray,
                                  position: Optional[Tuple[int, int]] = None,
-                                 style_override: Optional[Dict[str, Any]] = None
-                                 ) -> Tuple[np.ndarray, np.ndarray]:
+                                 style_ranges_override: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Сгенерировать подпись (уникальную) и наложить на BGR изображение.
-        Возвращает (result_image (BGR uint8), result_mask (H,W uint8 0/255)).
+        Сгенерировать уникальную подпись (параметры сэмплируются из style_ranges или style_ranges_override)
+        и наложить на BGR изображение. Возвращает (result_image, result_mask).
         """
         img_h, img_w = image.shape[:2]
-        sig_bgra, sig_mask = self.generate_signature(
-            width=self.config.get("signature_width", 400),
-            height=self.config.get("signature_height", 120),
-            style_override=style_override
-        )
+        # sample style values and generate signature
+        style_override = style_ranges_override or None
+
+        sig_bgra, sig_mask = self.generate_signature(width=self.config.get("signature_width", 400),
+                                                     height=self.config.get("signature_height", 120),
+                                                     style_override=style_override['style_ranges'])
         sig_h, sig_w = sig_mask.shape
 
-        # масштаб (scale_range в конфиге)
-        scale_range = self.config.get("scale_range", [0.8, 1.2])
-        scale = random.uniform(float(scale_range[0]), float(scale_range[1])) if scale_range else 1.0
+        # масштаб подписи
+        scale_range = self.config.get("scale_range", [0.8, 1.1])
+        scale = float(random.uniform(float(scale_range[0]), float(scale_range[1])))
         new_w = max(8, int(sig_w * scale))
         new_h = max(6, int(sig_h * scale))
 
@@ -429,7 +368,7 @@ class DigitalSignatureGenerator:
         sig_mask = cv2.resize(sig_mask, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         sig_h, sig_w = sig_mask.shape
 
-        # позиция
+        # позиционирование
         if position is None:
             margin_x = int(img_w * 0.03)
             margin_y = int(img_h * 0.03)
@@ -444,55 +383,60 @@ class DigitalSignatureGenerator:
 
         result = image.copy()
 
-        sig_b = sig_bgra[:, :, 0].astype(np.float32)
-        sig_g = sig_bgra[:, :, 1].astype(np.float32)
-        sig_r = sig_bgra[:, :, 2].astype(np.float32)
-        sig_a = sig_bgra[:, :, 3].astype(np.float32) / 255.0
+        sig_b = sig_bgra[:, :, 0].astype(float)
+        sig_g = sig_bgra[:, :, 1].astype(float)
+        sig_r = sig_bgra[:, :, 2].astype(float)
+        sig_a = sig_bgra[:, :, 3].astype(float) / 255.0
 
-        roi = result[y:y + sig_h, x:x + sig_w].astype(np.float32)
+        roi = result[y:y + sig_h, x:x + sig_w].astype(float)
         alpha_3c = np.stack([sig_a, sig_a, sig_a], axis=-1)
         src_rgb = np.stack([sig_b, sig_g, sig_r], axis=-1)
 
         blended = roi * (1 - alpha_3c) + src_rgb * alpha_3c
         result[y:y + sig_h, x:x + sig_w] = blended.clip(0, 255).astype(np.uint8)
 
-        result_mask = np.zeros((img_h, img_w), dtype=np.uint8)
+        mask_out = np.zeros((img_h, img_w), dtype=np.uint8)
         binary_sig = (sig_mask > 127).astype(np.uint8) * 255
-        result_mask[y:y + sig_h, x:x + sig_w] = binary_sig
+        mask_out[y:y + sig_h, x:x + sig_w] = binary_sig
 
-        return result, result_mask
+        return result, mask_out
 
-    # Утилита: сохранить сгенерированную подпись в PNG (с прозрачностью)
-    def save_signature_png(self,
-                           path: str,
-                           width: Optional[int] = None,
-                           height: Optional[int] = None,
-                           style_override: Optional[Dict[str, Any]] = None) -> None:
-        sig_bgra, _ = self.generate_signature(width=width, height=height, style_override=style_override)
-        # BGRA -> RGBA для PIL
+    def save_signature_png(self, path: str, width: Optional[int] = None, height: Optional[int] = None,
+                           style_ranges_override: Optional[Dict[str, Any]] = None) -> None:
+        sig_bgra, _ = self.generate_signature(width=width, height=height, style_override=style_ranges_override)
         rgba = np.dstack([sig_bgra[:, :, 2], sig_bgra[:, :, 1], sig_bgra[:, :, 0], sig_bgra[:, :, 3]])
         img = Image.fromarray(rgba, mode="RGBA")
         img.save(path, format="PNG")
 
+
 # -----------------------------
-# Пример использования (комментарии)
+# USAGE EXAMPLES
 # -----------------------------
-# from core.digital_signature import DigitalSignatureGenerator
-# import cv2
+# Пример конфига:
 # cfg = {
-#     "signature_width": 480,
-#     "signature_height": 140,
-#     "scale_range": [0.7, 1.1],
-#     "default_style": "mouse_basic"
+#     "signature_width": 400,
+#     "signature_height": 120,
+#     "scale_range": [0.75, 1.05],
+#     "style_ranges": {
+#         "num_strokes_range": [2,3],
+#         "stroke_thickness_range": [1,2],
+#         "pressure_variation_prob": 0.0,
+#         "antialias_scale": [1,1],
+#         "smoothing": [0.0, 0.18],
+#         "jitter_intensity": [0.3, 0.8],
+#         "jitter_frequency": [0.35, 0.55],
+#         "steps_per_stroke": [160, 200],
+#         "hand_lift_chance": [0.05, 0.14],
+#         "hand_lift_max_segments": [1,2],
+#         "ink_color_range": [[60,100],[60,100],[60,100]],  # серый карандаш
+#         "opacity": [0.78, 0.92],
+#         "splat_chance": [0.0, 0.01],
+#         "extra_small_strokes_prob": [0.0, 0.05],
+#         "variable_sampling_prob": [0.8, 1.0]
+#     }
 # }
+#
 # gen = DigitalSignatureGenerator(cfg)
-# # Сгенерировать и применить подпись:
-# img = cv2.imread("photo.jpg")  # BGR
-# res, mask = gen.apply_signature_to_image(img)  # уникальная подпись
-# cv2.imwrite("photo_signed.jpg", res)
-#
-# # Применить стиль rapid только для этой вставки:
-# res2, mask2 = gen.apply_signature_to_image(img, style_override={"ink_color": (0,0,60), "jitter_intensity": 6.0})
-#
-# # Сохранить подпись в PNG:
-# gen.save_signature_png("signature_demo.png", width=600, height=160, style_override={"ink_color": (10,10,120)})
+# img = cv2.imread("photo.jpg")
+# res, mask = gen.apply_signature_to_image(img)  # каждый вызов — уникальная подпись
+# gen.save_signature_png("example_sig.png")
