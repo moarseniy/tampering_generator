@@ -114,11 +114,11 @@ def generate_realistic_signature(width: int = 400,
         "jitter_intensity": 0.6,
         "jitter_frequency": 0.45,
         "steps_per_stroke": 400,
-        "hand_lift_chance": 0.0,
+        "hand_lift_prob": 0.0,
         "hand_lift_max_segments": 0,
         "ink_color": (0, 0, 0),
         "opacity": 1.0,
-        "splat_chance": 0.0,
+        "splat_prob": 0.0,
         "extra_small_strokes_prob": 0.0,
         "variable_sampling": True,
         "seed": None
@@ -126,6 +126,8 @@ def generate_realistic_signature(width: int = 400,
 
     if style:
         cfg.update(style)
+
+    # print(cfg)
 
     if cfg.get("seed") is not None:
         random.seed(cfg["seed"])
@@ -144,8 +146,8 @@ def generate_realistic_signature(width: int = 400,
 
         # hand-lift segmentation
         segments = [(0, len(pts))]
-        if random.random() < float(cfg.get("hand_lift_chance", 0.0)):
-            max_seg = int(cfg.get("hand_lift_max_segments", 2))
+        if random.random() < float(cfg.get("hand_lift_prob", 0.0)):
+            max_seg = max(1, int(cfg.get("hand_lift_max_segments", 2)))
             n_seg = random.randint(1, max_seg)
             indices = sorted(random.sample(range(1, len(pts) - 1), n_seg - 1))
             segs = []
@@ -193,7 +195,7 @@ def generate_realistic_signature(width: int = 400,
                     draw.ellipse([px - rr, py - rr, px + rr, py + rr], fill=0)
 
         # splat
-        if random.random() < float(cfg.get("splat_chance", 0.0)):
+        if random.random() < float(cfg.get("splat_prob", 0.0)):
             mid_idx = len(pts) // 2 + random.randint(-8, 8)
             mx, my = pts[mid_idx].astype(int)
             smin, smax = cfg.get("splat_size_range", [4, 10])
@@ -209,7 +211,20 @@ def generate_realistic_signature(width: int = 400,
     mask = (255 - signature_gray).clip(0, 255).astype(np.uint8)
 
     # color + alpha
-    ink_rgb = tuple(int(c) for c in cfg.get("ink_color", (0, 0, 0)))
+    # ink_rgb = tuple(int(c) for c in cfg.get("ink_color", (0, 0, 0)))
+    ink_color = cfg.get("ink_color", (0, 0, 0))
+
+    # Если передано "random" — генерируем случайный цвет
+    if ink_color == "random":
+        ink_rgb = (
+            np.random.randint(0, 256),
+            np.random.randint(0, 256),
+            np.random.randint(0, 256),
+        )
+    else:
+        # обычная обработка
+        ink_rgb = tuple(int(c) for c in ink_color)
+
     opacity = float(cfg.get("opacity", 1.0))
     h, w = mask.shape
     b = np.full((h, w), ink_rgb[2], dtype=np.uint8)
@@ -293,7 +308,7 @@ class DigitalSignatureGenerator:
         style["steps_per_stroke"] = int(_sample_scalar(merged.get("steps_per_stroke", [120, 220])))
 
         # hand_lift
-        style["hand_lift_chance"] = float(_sample_scalar(merged.get("hand_lift_chance", [0.0, 0.1])))
+        style["hand_lift_prob"] = float(_sample_scalar(merged.get("hand_lift_prob", [0.0, 0.1])))
         style["hand_lift_max_segments"] = int(_sample_scalar(merged.get("hand_lift_max_segments", [1, 2])))
 
         # ink color: support fixed ink_color or ink_color_range
@@ -306,7 +321,7 @@ class DigitalSignatureGenerator:
         style["opacity"] = float(_sample_scalar(merged.get("opacity", [0.8, 1.0])))
 
         # splat
-        style["splat_chance"] = float(_sample_scalar(merged.get("splat_chance", [0.0, 0.05])))
+        style["splat_prob"] = float(_sample_scalar(merged.get("splat_prob", [0.0, 0.05])))
         # splat_size_range can be either [min,max] or [[min,max],[min,max]]; normalize to [min,max]
         ssr = merged.get("splat_size_range", [4, 10])
         if isinstance(ssr, (list, tuple)) and len(ssr) == 2 and isinstance(ssr[0], (int, float)):
@@ -426,11 +441,11 @@ class DigitalSignatureGenerator:
 #         "jitter_intensity": [0.3, 0.8],
 #         "jitter_frequency": [0.35, 0.55],
 #         "steps_per_stroke": [160, 200],
-#         "hand_lift_chance": [0.05, 0.14],
+#         "hand_lift_prob": [0.05, 0.14],
 #         "hand_lift_max_segments": [1,2],
 #         "ink_color_range": [[60,100],[60,100],[60,100]],  # серый карандаш
 #         "opacity": [0.78, 0.92],
-#         "splat_chance": [0.0, 0.01],
+#         "splat_prob": [0.0, 0.01],
 #         "extra_small_strokes_prob": [0.0, 0.05],
 #         "variable_sampling_prob": [0.8, 1.0]
 #     }

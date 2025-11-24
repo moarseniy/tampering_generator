@@ -60,27 +60,28 @@ splicing:
 
     digital_signature:
       enabled: true
-      random_position_prob: 1.0
-      signature_width: 400            # Ширина генерируемых подписей
-      signature_height: 120           # Высота генерируемых подписей
-      scale_range: [0.7, 1.3]         # Диапазон масштабирования при вставке
+      random_position_prob: 1.0         # Вер-ть генерировать не в боксе разметки
+      signature_width: [400, 400]       # Ширина генерируемых подписей
+      signature_height: [120, 120]      # Высота генерируемых подписей
+      scale_range: [0.7, 1.3]           # Диапазон масштабирования при вставке
       
       style_ranges:
-        num_strokes_range: [17, 20]
-        stroke_thickness_range: [1, 1]
-        pressure_variation: False
-        antialias_scale: 1
-        smoothing: 0.0
-        pressure_variation: False
-        jitter_intensity: 0.6
-        jitter_frequency: 0.45
-        steps_per_stroke: 400
-        hand_lift_chance: 0.0
-        hand_lift_max_segments: 0
-        opacity: 1.0
-        splat_chance_prob: 0.0
-        extra_small_strokes_prob: 0.0
-        variable_sampling: True
+        num_strokes_range: [3, 15]      # Количество штрихов в подписи (минимум–максимум)
+        stroke_thickness_range: [1, 3]  # Толщина линии (фиксированная, без вариации)
+        pressure_variation: False       # Имитация изменения толщины от давления пера
+        antialias_scale: [1, 3]         # Масштаб для сглаживания (1 = без антиалиасинга)
+        smoothing: [0.0, 1.0]           # Уровень сглаживания кривых (0 = без сглаживания)
+        jitter_intensity: [0.2, 0.6]    # Насколько сильно штрихи колеблются (дрожание)
+        jitter_frequency: [0.45, 0.45]  # Частота колебаний штрихов
+        steps_per_stroke: [400, 600]    # Количество шагов/точек при рисовании каждого штриха
+        hand_lift_prob: 0.1             # Вероятность, что "рука" поднимется между сегментами
+        hand_lift_max_segments: [1, 3]  # Макс. число сегментов при подъёме руки
+        ink_color: "random"             # Цвет чернил — random = случайный RGB
+        opacity: [0.2, 1.0]             # Прозрачность штриха (диапазон)
+        splat_prob: 0.0                 # Вероятность появление "клякс" / брызг
+        extra_small_strokes_prob: 0.0   # Вероятность добавления маленьких дополнительных штрихов
+        variable_sampling: True         # Переменная дискретизация: делает подпись менее ровной
+
 
 # Настройки качества
 quality:
