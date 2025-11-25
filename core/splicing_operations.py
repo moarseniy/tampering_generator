@@ -1,9 +1,10 @@
+import os
 import cv2
 import numpy as np
 import random
 from typing import Dict, Tuple, List, Optional
 from .bbox_processor import BBoxProcessor
-from .text_printing_utils import random_text, render_text_into_bbox, get_random_font, collect_ttf_fonts
+from .text_printing_utils import random_text, render_text_into_bbox
 
 # from simple_lama_inpainting import SimpleLama
 # from PIL import Image
@@ -243,18 +244,18 @@ class SplicingOperations:
             raise ValueError("TTF font list is empty!")
         return random.choice(self.ttf_list)
 
-    def _collect_ttf_fonts(self) -> List[str]:
+    def _collect_ttf_fonts(self):
         """
         Рекурсивно ищет все файлы .ttf в директории и её поддиректориях.
         Возвращает список абсолютных путей.
         """
         fonts_dir = self.config['generation']['resources_dir']
 
-        self.ttf_files = []
+        self.ttf_list = []
         for root, dirs, files in os.walk(fonts_dir):
             for f in files:
                 if f.lower().endswith(".ttf"):
-                    self.ttf_files.append(os.path.join(root, f))
+                    self.ttf_list.append(os.path.join(root, f))
 
 
     def inpaint_borders(self, base_image: np.ndarray, base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
