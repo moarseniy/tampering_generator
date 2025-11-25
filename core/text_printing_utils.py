@@ -4,6 +4,30 @@ import numpy as np
 import cv2
 import os
 from typing import List
+from fontTools.ttLib import TTFont
+
+def font_supports_alphabet(font_path: str, alphabet: str) -> bool:
+    """
+    Проверяет, поддерживает ли TTF-файл все символы из alphabet.
+    """
+    try:
+        font = TTFont(font_path, fontNumber=0)
+    except Exception:
+        return False  # битые шрифты пропускаем
+
+    # собрать mapping unicode → glyph
+    unicodes = set()
+
+    for table in font["cmap"].tables:
+        if table.isUnicode():
+            unicodes.update(table.cmap.keys())
+
+    # проверить каждый символ алфавита
+    for ch in alphabet:
+        if ord(ch) not in unicodes:
+            return False
+
+    return True
 
 def random_text(alphabet: str, text_len=5) -> str:
     return "".join(random.choice(alphabet) for _ in range(text_len))

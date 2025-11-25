@@ -4,7 +4,8 @@ import numpy as np
 import random
 from typing import Dict, Tuple, List, Optional
 from .bbox_processor import BBoxProcessor
-from .text_printing_utils import random_text, render_text_into_bbox
+
+from .text_printing_utils import random_text, render_text_into_bbox, font_supports_alphabet
 
 # from simple_lama_inpainting import SimpleLama
 # from PIL import Image
@@ -110,6 +111,10 @@ class SplicingOperations:
         self.sources = sources
         self.bbox_processor = BBoxProcessor()
         self.signature_generator = DigitalSignatureGenerator(self.config['splicing']['operations'].get('digital_signature', {}))
+        
+        # alphabet = load_alphabet(cfg["alphabet_path"])
+        self.alphabet = " АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789"
+
         self._collect_ttf_fonts()
 
     # В класс SplicingOperations добавьте:
@@ -255,8 +260,10 @@ class SplicingOperations:
         for root, dirs, files in os.walk(fonts_dir):
             for f in files:
                 if f.lower().endswith(".ttf"):
-                    self.ttf_list.append(os.path.join(root, f))
-
+                    full_path = os.path.join(root, f)
+                    if font_supports_alphabet(full_path, self.alphabet):
+                        self.ttf_list.append(full_path)
+        print(f"Успешно загружено {len(self.ttf_list)} шрифтов!")
 
     def inpaint_borders(self, base_image: np.ndarray, base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
         h, w = base_image.shape[:2]
@@ -292,14 +299,11 @@ class SplicingOperations:
 
         result_image = self._opencv_inpaint(base_image, mask, radius, method)
         
-        # alphabet = load_alphabet(cfg["alphabet_path"])
-        alphabet = " АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789"
-
         # printing text on inpainted image
         for bbox in chosen_bboxes:
             if random.random() < print_text_prob:
                 text_len = random.randint(cfg_text_len[0], cfg_text_len[1])
-                text = random_text(alphabet, text_len)
+                text = random_text(self.alphabet, text_len)
                 font_path = self._get_random_font()
                 result_image = render_text_into_bbox(result_image, text, bbox['bbox'], font_path)
 

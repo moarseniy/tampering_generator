@@ -6,7 +6,7 @@ from typing import Dict, Tuple
 from .base_manipulator import BaseForgeryGenerator
 from .splicing_operations import SplicingOperations
 from .digital_signature import DigitalSignatureGenerator
-from .text_printing_utils import random_text, render_text_into_bbox
+from .text_printing_utils import random_text, render_text_into_bbox, font_supports_alphabet
 
 from .utils import save_forgery_result, ensure_directory
 from .utils import (
