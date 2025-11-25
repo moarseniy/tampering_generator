@@ -415,6 +415,16 @@ class DigitalSignatureGenerator:
         alpha_3c = np.stack([sig_a, sig_a, sig_a], axis=-1)
         src_rgb = np.stack([sig_b, sig_g, sig_r], axis=-1)
 
+        # --- FIX: подгоняем подпись под ROI, если вдруг размеры не совпали ---
+        roi_h, roi_w = roi.shape[:2]
+        sig_h2, sig_w2 = src_rgb.shape[:2]
+
+        if (roi_h != sig_h2) or (roi_w != sig_w2):
+            src_rgb = cv2.resize(src_rgb, (roi_w, roi_h), interpolation=cv2.INTER_AREA)
+            alpha_3c = cv2.resize(alpha_3c, (roi_w, roi_h), interpolation=cv2.INTER_AREA)
+            sig_mask = cv2.resize(sig_mask, (roi_w, roi_h), interpolation=cv2.INTER_LINEAR)
+            sig_h, sig_w = roi_h, roi_w
+
         blended = roi * (1 - alpha_3c) + src_rgb * alpha_3c
         result[y:y + sig_h, x:x + sig_w] = blended.clip(0, 255).astype(np.uint8)
 
