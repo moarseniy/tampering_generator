@@ -2,10 +2,11 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import cv2
+import os
+from typing import List
 
-def random_text(alphabet: str, min_len=5, max_len=15) -> str:
-    length = random.randint(min_len, max_len)
-    return "".join(random.choice(alphabet) for _ in range(length))
+def random_text(alphabet: str, text_len=5) -> str:
+    return "".join(random.choice(alphabet) for _ in range(text_len))
 
 def render_text_into_bbox(image: np.ndarray, text: str, bbox: dict, font_path: str, font_size: int = 30):
     """

@@ -3,7 +3,7 @@ import numpy as np
 import random
 from typing import Dict, Tuple, List, Optional
 from .bbox_processor import BBoxProcessor
-from .text_printing_utils import random_text, render_text_into_bbox
+from .text_printing_utils import random_text, render_text_into_bbox, get_random_font, collect_ttf_fonts
 
 # from simple_lama_inpainting import SimpleLama
 # from PIL import Image
@@ -109,7 +109,8 @@ class SplicingOperations:
         self.sources = sources
         self.bbox_processor = BBoxProcessor()
         self.signature_generator = DigitalSignatureGenerator(self.config['splicing']['operations'].get('digital_signature', {}))
-    
+        self._collect_ttf_fonts()
+
     # В класс SplicingOperations добавьте:
     def digital_signature(self, 
                         base_image: np.ndarray, 
@@ -232,15 +233,36 @@ class SplicingOperations:
         # Маска должна быть 8-bit 1 channel, ненулевые пиксели помечают область
         mask_bin = (mask > 0).astype(np.uint8)
         return cv2.inpaint(image, mask_bin, radius, inpaint_method)
-    
+
+    def _get_random_font(self) -> str:
+        """
+        Возвращает случайный путь к TTF файлу из списка.
+        Если список пуст — вызывает исключение.
+        """
+        if not self.ttf_list:
+            raise ValueError("TTF font list is empty!")
+        return random.choice(self.ttf_list)
+
+    def _collect_ttf_fonts(self) -> List[str]:
+        """
+        Рекурсивно ищет все файлы .ttf в директории и её поддиректориях.
+        Возвращает список абсолютных путей.
+        """
+        fonts_dir = self.config['generation']['resources_dir']
+
+        self.ttf_files = []
+        for root, dirs, files in os.walk(fonts_dir):
+            for f in files:
+                if f.lower().endswith(".ttf"):
+                    self.ttf_files.append(os.path.join(root, f))
+
+
     def inpaint_borders(self, base_image: np.ndarray, base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Если mode == "text": вписываем текст в bbox.
-        Если mode == "inpaint": заполняем bbox через cv2.inpaint.
-        """
         h, w = base_image.shape[:2]
         cfg = self.config['splicing']['operations'].get('inpaint_borders', {})
-        mode = cfg.get("mode", "inpaint")  # "inpaint" или "text"
+
+        print_text_prob = cfg.get("print_text_prob", 0.5)
+        cfg_text_len = cfg.get("text_len", [1, 5])
 
         radius = cfg.get('radius', 3)
         method = cfg.get('method', 'telea')
@@ -263,32 +285,23 @@ class SplicingOperations:
 
         mask = np.zeros((h, w), dtype=np.uint8)
 
-        if mode == "text":
-            # alphabet = load_alphabet(cfg["alphabet_path"])
-            alphabet = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
-
-            font_path = cfg["font"]
-            min_len = cfg.get("text_min_len", 5)
-            max_len = cfg.get("text_max_len", 15)
-
-            result = base_image.copy()
-
-            for bbox in chosen_bboxes:
-                text = random_text(alphabet, min_len=min_len, max_len=max_len)
-                print(bbox)
-                result = render_text_into_bbox(result, text, bbox['bbox'], font_path)
-
-                # маска = область бокса
-                bbox_mask = self.bbox_processor.create_bbox_mask((h, w), bbox)
-                mask = np.maximum(mask, bbox_mask)
-
-            return result, mask
-
         for bbox in chosen_bboxes:
             bbox_mask = self.bbox_processor.create_bbox_mask((h, w), bbox)
             mask = np.maximum(mask, bbox_mask)
 
         result_image = self._opencv_inpaint(base_image, mask, radius, method)
+        
+        # alphabet = load_alphabet(cfg["alphabet_path"])
+        alphabet = " АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789"
+
+        # printing text on inpainted image
+        for bbox in chosen_bboxes:
+            if random.random() < print_text_prob:
+                text_len = random.randint(cfg_text_len[0], cfg_text_len[1])
+                text = random_text(alphabet, text_len)
+                font_path = self._get_random_font()
+                result_image = render_text_into_bbox(result_image, text, bbox['bbox'], font_path)
+
         return result_image, mask
 
     
