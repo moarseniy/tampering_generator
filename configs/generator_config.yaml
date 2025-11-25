@@ -42,8 +42,17 @@ splicing:
       allowed_categories: []     # пустой список = любые категории
       radius: 5                  # радиус inpaint
       method: "telea"            # telea | ns
-      print_text_prob: 0.5
+      print_text_prob: 1.0
       text_len: [1, 10]
+      text_style:
+        font_size_range: [35, 100]
+        font_color: "random"
+        opacity: [0.5, 1.0] 
+        angle: 0 # угол поворота текста в градусах (фикс или [min,max])
+        align: "center"  #"left"/"right" (по горизонтали)
+        valign: "middle" #"top"/"bottom" (по вертикали)
+        # stroke_width: # int 
+        # stroke_fill: # color spec 
     
     inpaint_random:
       enabled: false

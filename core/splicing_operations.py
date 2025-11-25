@@ -305,7 +305,7 @@ class SplicingOperations:
                 text_len = random.randint(cfg_text_len[0], cfg_text_len[1])
                 text = random_text(self.alphabet, text_len)
                 font_path = self._get_random_font()
-                result_image = render_text_into_bbox(result_image, text, bbox['bbox'], font_path)
+                result_image = render_text_into_bbox(result_image, text, bbox['bbox'], font_path, cfg["text_style"])
 
         return result_image, mask
 
