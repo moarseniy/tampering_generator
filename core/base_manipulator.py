@@ -83,6 +83,8 @@ class BaseForgeryGenerator:
             return self.splicing_ops.external_patch_insertion(image, markup, patch_image, patch_markup)
         elif chosen_op == 'internal_swap':
             return self.splicing_ops.internal_bbox_swap(image, markup)
+        elif chosen_op == 'print_text':
+            return self.splicing_ops.print_text(image, markup)
         elif chosen_op == 'inpaint_borders':
             return self.splicing_ops.inpaint_borders(image, markup)
         elif chosen_op == 'inpaint_random':

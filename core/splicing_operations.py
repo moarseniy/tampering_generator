@@ -5,7 +5,7 @@ import random
 from typing import Dict, Tuple, List, Optional
 from .bbox_processor import BBoxProcessor
 
-from .text_printing_utils import random_text, render_text_into_bbox, font_supports_alphabet
+from .text_printing_utils import random_text, render_text_into_bbox, font_supports_alphabet, render_random_text_with_mask
 
 # from simple_lama_inpainting import SimpleLama
 # from PIL import Image
@@ -116,6 +116,33 @@ class SplicingOperations:
         self.alphabet = " АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789"
 
         self._collect_ttf_fonts()
+
+    def print_text(self, 
+                base_image: np.ndarray, 
+                base_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
+        h, w = base_image.shape[:2]
+        cfg = self.config['splicing']['operations'].get('print_text', {})
+        
+        if not cfg.get('enabled', True):
+            return base_image, np.zeros(base_image.shape[:2], dtype=np.uint8)
+        
+        cfg_text_len = cfg.get("text_len", [1, 5])
+        cfg_word_count = cfg.get("word_count", [1, 3])
+
+        mask = np.zeros((h, w), dtype=np.uint8)
+        
+        word_count = random.randint(cfg_word_count[0], cfg_word_count[1])
+        
+        image = base_image.copy()
+        for i in range(word_count):
+            text_len = random.randint(cfg_text_len[0], cfg_text_len[1])
+            text = random_text(self.alphabet, text_len)
+            
+            font_path = self._get_random_font()
+            image, result_mask = render_random_text_with_mask(image, text, font_path, cfg["text_style"])
+            mask = np.maximum(mask, result_mask)
+
+        return image, mask
 
     # В класс SplicingOperations добавьте:
     def digital_signature(self, 

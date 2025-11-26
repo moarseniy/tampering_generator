@@ -165,7 +165,7 @@ def render_text_into_bbox(image: np.ndarray,
     except Exception:
         # fallback to default font
         font = ImageFont.load_default()
-
+    
     # --- подобрать размер шрифта если нужно уменьшить чтобы влезло ---
     text_w, text_h = draw.textsize(text, font=font)
     # уменьшать только если слишком большой
@@ -220,3 +220,112 @@ def render_text_into_bbox(image: np.ndarray,
 
     # вернуть в OpenCV BGR
     return cv2.cvtColor(np.array(composed), cv2.COLOR_RGB2BGR)
+
+
+
+def render_random_text_with_mask(
+        image: np.ndarray,
+        text: str,
+        font_path: str,
+        style: Optional[Dict[str, Any]] = None
+    ):
+    """
+    Рисует текст в случайном месте изображения,
+    гарантирует что текст не выходит за границы,
+    и возвращает маску текста (255 — текст, 0 — фон).
+
+    Возвращает:
+        rendered_image (np.ndarray)
+        mask (np.ndarray)
+    """
+
+    # --- конфиг стиля (default) ---
+    style = style or {}
+    font_size_spec = style.get("font_size", style.get("font_size_range", [20, 36]))
+    color_spec = style.get("font_color", style.get("font_color_range", None))
+    opacity_spec = style.get("opacity", [1.0, 1.0])
+    angle_spec = style.get("angle", 0)
+    align = style.get("align", "center")       # center / left / right
+    valign = style.get("valign", "middle")     # middle / top / bottom
+    stroke_width = int(style.get("stroke_width", 0))
+    stroke_fill_spec = style.get("stroke_fill", None)
+
+    # sample values
+    font_size = _sample_scalar(font_size_spec, dtype=int, default=font_size_spec if isinstance(font_size_spec, int) else 20)
+    font_color = _sample_color(color_spec, default=(0, 0, 0))
+    stroke_fill = _sample_color(stroke_fill_spec, default=None) if stroke_fill_spec is not None else None
+    opacity = _sample_scalar(opacity_spec, dtype=float, default=1.0)
+    angle = _sample_scalar(angle_spec, dtype=float, default=angle_spec if isinstance(angle_spec, (int, float)) else 0.0)
+
+    # ensure valid ranges
+    opacity = max(0.0, min(1.0, float(opacity)))
+    font_size = max(8, int(font_size))
+
+    # --- загрузка шрифта ---
+    try:
+        if font_path:
+            font = ImageFont.truetype(font_path, font_size)
+        else:
+            font = ImageFont.load_default()
+    except Exception:
+        # fallback to default font
+        font = ImageFont.load_default()
+
+    H, W = image.shape[:2]
+
+    # --- подбираем случайный размер шрифта ---
+    font = ImageFont.truetype(font_path, font_size)
+
+    # --- создаём PIL объект ---
+    pil_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).convert("RGBA")
+    text_layer = Image.new("RGBA", (W, H), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(text_layer)
+
+    # --- считаем размер текста ---
+    #   НОВЫЙ метод: font.getbbox — работает в Pillow 11
+    bbox = font.getbbox(text)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+
+    # --- гарантируем, что текст влезает ---
+    if text_w > W or text_h > H:
+        # уменьшаем пока не влезет
+        fs = font_size
+        while fs >= 6:
+            font = ImageFont.truetype(font_path, fs)
+            bbox = font.getbbox(text)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            if text_w <= W and text_h <= H:
+                break
+            fs -= 1
+
+    # --- случайная позиция ---
+    x = random.randint(0, W - text_w)
+    y = random.randint(0, H - text_h)
+
+    # --- рисуем текст ---
+    rgba_color = (
+        int(font_color[0]),
+        int(font_color[1]),
+        int(font_color[2]),
+        int(opacity * 255)
+    )
+
+    draw.text((x, y), text, fill=rgba_color, font=font)
+
+    # --- объединяем текст с исходным изображением ---
+    out = Image.alpha_composite(pil_img, text_layer)
+
+    # --- собираем маску ---
+    # берём альфа-канал слоя текста → там где текст — 255
+    text_alpha = np.array(text_layer.split()[-1])  # A-канал
+
+    # text_alpha уже чёткая маска текста
+    # mask = text_alpha
+    mask = np.where(text_alpha > 0, 255, 0).astype(np.uint8)
+
+    # --- convert RGBA -> BGR ---
+    out_bgr = cv2.cvtColor(np.array(out.convert("RGB")), cv2.COLOR_RGB2BGR)
+
+    return out_bgr, mask
