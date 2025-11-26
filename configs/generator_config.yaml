@@ -35,8 +35,23 @@ splicing:
       enabled: false
       probability: 0.5
     
-    inpaint_borders:
+    print_text:
       enabled: true
+      probability: 0.4
+      text_len: [1, 6]
+      word_count: [1, 3]
+      text_style:
+        font_size_range: [35, 100]
+        font_color: "random"
+        opacity: [0.5, 1.0] 
+        angle: 0 # угол поворота текста в градусах (фикс или [min,max])
+        align: "center"  #"left"/"right" (по горизонтали)
+        valign: "middle" #"top"/"bottom" (по вертикали)
+        # stroke_width: # int 
+        # stroke_fill: # color spec 
+
+    inpaint_borders:
+      enabled: false
       probability: 0.4
       num_bboxes: [1, 2]         # выбрать N случайных bbox из разметки
       allowed_categories: []     # пустой список = любые категории
@@ -82,15 +97,15 @@ splicing:
         num_strokes_range: [3, 15]      # Количество штрихов в подписи (минимум–максимум)
         stroke_thickness_range: [1, 3]  # Толщина линии (фиксированная, без вариации)
         pressure_variation: False       # Имитация изменения толщины от давления пера
-        antialias_scale: [1, 3]         # Масштаб для сглаживания (1 = без антиалиасинга)
-        smoothing: [0.0, 1.0]           # Уровень сглаживания кривых (0 = без сглаживания)
-        jitter_intensity: [0.2, 0.6]    # Насколько сильно штрихи колеблются (дрожание)
-        jitter_frequency: [0.45, 0.45]  # Частота колебаний штрихов
+        antialias_scale: [1, 1]         # Масштаб для сглаживания (1 = без антиалиасинга)
+        smoothing: [0.0, 0.0]           # Уровень сглаживания кривых (0 = без сглаживания)
+        jitter_intensity: [0.0, 0.0]    # Насколько сильно штрихи колеблются (дрожание)
+        jitter_frequency: [0.0, 0.0]  # Частота колебаний штрихов
         steps_per_stroke: [400, 600]    # Количество шагов/точек при рисовании каждого штриха
         hand_lift_prob: 0.1             # Вероятность, что "рука" поднимется между сегментами
         hand_lift_max_segments: [1, 3]  # Макс. число сегментов при подъёме руки
-        ink_color: "random"             # Цвет чернил — random = случайный RGB
-        opacity: [0.2, 1.0]             # Прозрачность штриха (диапазон)
+        ink_color1: "random"             # Цвет чернил — random = случайный RGB
+        opacity: [1.0, 1.0]             # Прозрачность штриха (диапазон)
         splat_prob: 0.0                 # Вероятность появление "клякс" / брызг
         extra_small_strokes_prob: 0.0   # Вероятность добавления маленьких дополнительных штрихов
         variable_sampling: True         # Переменная дискретизация: делает подпись менее ровной
