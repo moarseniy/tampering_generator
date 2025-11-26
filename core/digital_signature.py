@@ -127,8 +127,6 @@ def generate_realistic_signature(width: int = 400,
     if style:
         cfg.update(style)
 
-    # print(cfg)
-
     if cfg.get("seed") is not None:
         random.seed(cfg["seed"])
         np.random.seed(cfg["seed"])
@@ -149,19 +147,24 @@ def generate_realistic_signature(width: int = 400,
         if random.random() < float(cfg.get("hand_lift_prob", 0.0)):
             max_seg = max(1, int(cfg.get("hand_lift_max_segments", 2)))
             n_seg = random.randint(1, max_seg)
-            indices = sorted(random.sample(range(1, len(pts) - 1), n_seg - 1))
-            segs = []
-            prev = 0
-            for idx in indices:
-                segs.append((prev, idx))
-                prev = idx
-            segs.append((prev, len(pts)))
-            segments = segs
+            if n_seg > 1:
+                indices = sorted(random.sample(range(1, len(pts) - 1), n_seg - 1))
+                segs = []
+                prev = 0
+                for idx in indices:
+                    segs.append((prev, idx))
+                    prev = idx
+                segs.append((prev, len(pts)))
+                segments = segs
 
         base_thickness_min, base_thickness_max = _sample_int_range(cfg.get("stroke_thickness_range", [1, 3]))
         pressure_variation = bool(cfg.get("pressure_variation", False))
         jitter_intensity = float(cfg.get("jitter_intensity", 0.0)) * scale
         jitter_freq = float(cfg.get("jitter_frequency", 0.0))
+
+        # select brush mode: "ellipse" (default) or "pencil"
+        # TODO: add to config
+        brush_mode = "pencil" # cfg.get("brush_mode", "ellipse")
 
         for (s_start, s_end) in segments:
             seg_pts = pts[s_start:s_end]
@@ -172,19 +175,40 @@ def generate_realistic_signature(width: int = 400,
             if jitter_intensity > 0:
                 mask = np.random.rand(seg_pts.shape[0]) < jitter_freq
                 noise = np.zeros_like(seg_pts)
-                noise[mask] = np.random.normal(scale=jitter_intensity, size=(mask.sum(), 2))
+                if mask.sum() > 0:
+                    noise[mask] = np.random.normal(scale=jitter_intensity, size=(mask.sum(), 2))
                 seg_pts = seg_pts + noise
 
-            # draw points as overlapping circles
-            for i, (px, py) in enumerate(seg_pts.astype(int)):
-                t = i / max(1, (len(seg_pts) - 1))
-                if pressure_variation:
-                    pressure = 0.7 + 0.6 * (0.5 + 0.5 * np.sin(2 * np.pi * (t + random.random() * 0.2)))
-                else:
-                    pressure = 1.0
-                base_thickness = random.randint(base_thickness_min, base_thickness_max)
-                r = max(1, int(base_thickness * (0.6 + 0.8 * pressure)))
-                draw.ellipse([px - r, py - r, px + r, py + r], fill=0)
+            # pencil mode uses lines between consecutive points with integer width
+            if brush_mode == "pencil":
+                prev_px, prev_py = None, None
+                for i, (px, py) in enumerate(seg_pts.astype(int)):
+                    # base thickness interpreted literally as pixels (no pressure scaling)
+                    base_thickness = random.randint(base_thickness_min, base_thickness_max)
+                    if prev_px is None:
+                        # draw a small dot/circle for the first point to avoid gaps
+                        if base_thickness <= 1:
+                            draw.point((px, py), fill=0)
+                        else:
+                            r = base_thickness // 2
+                            draw.ellipse([px - r, py - r, px + r, py + r], fill=0)
+                    else:
+                        # draw a line between prev and current with fixed integer width
+                        # PIL's line uses integer width and gives a solid stroke
+                        draw.line([(prev_px, prev_py), (px, py)], fill=0, width=base_thickness)
+                    prev_px, prev_py = int(px), int(py)
+
+            else:
+                # default ellipse behaviour (как было)
+                for i, (px, py) in enumerate(seg_pts.astype(int)):
+                    t = i / max(1, (len(seg_pts) - 1))
+                    if pressure_variation:
+                        pressure = 0.7 + 0.6 * (0.5 + 0.5 * np.sin(2 * np.pi * (t + random.random() * 0.2)))
+                    else:
+                        pressure = 1.0
+                    base_thickness = random.randint(base_thickness_min, base_thickness_max)
+                    r = max(1, int(base_thickness * (0.6 + 0.8 * pressure)))
+                    draw.ellipse([px - r, py - r, px + r, py + r], fill=0)
 
             # extra small strokes
             if random.random() < float(cfg.get("extra_small_strokes_prob", 0.0)):
@@ -197,6 +221,7 @@ def generate_realistic_signature(width: int = 400,
         # splat
         if random.random() < float(cfg.get("splat_prob", 0.0)):
             mid_idx = len(pts) // 2 + random.randint(-8, 8)
+            mid_idx = max(0, min(len(pts) - 1, mid_idx))
             mx, my = pts[mid_idx].astype(int)
             smin, smax = cfg.get("splat_size_range", [4, 10])
             _add_ink_splat(draw, mx, my, random.randint(int(smin * scale), int(smax * scale)))
@@ -211,19 +236,38 @@ def generate_realistic_signature(width: int = 400,
     mask = (255 - signature_gray).clip(0, 255).astype(np.uint8)
 
     # color + alpha
-    # ink_rgb = tuple(int(c) for c in cfg.get("ink_color", (0, 0, 0)))
     ink_color = cfg.get("ink_color", (0, 0, 0))
 
-    # Если передано "random" — генерируем случайный цвет
-    if ink_color == "random":
-        ink_rgb = (
-            np.random.randint(0, 256),
-            np.random.randint(0, 256),
-            np.random.randint(0, 256),
-        )
+    # robust ink color handling: "random", hex string, tuple/list
+    if isinstance(ink_color, str):
+        if ink_color.lower() == "random":
+            ink_rgb = (
+                int(np.random.randint(0, 256)),
+                int(np.random.randint(0, 256)),
+                int(np.random.randint(0, 256)),
+            )
+        elif ink_color.startswith("#"):
+            s = ink_color.lstrip("#")
+            if len(s) == 3:
+                s = "".join([c * 2 for c in s])
+            try:
+                ink_rgb = (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+            except Exception:
+                ink_rgb = (0, 0, 0)
+        else:
+            # unknown string -> fallback to random
+            ink_rgb = (
+                int(np.random.randint(0, 256)),
+                int(np.random.randint(0, 256)),
+                int(np.random.randint(0, 256)),
+            )
+    elif isinstance(ink_color, (list, tuple)) and len(ink_color) == 3:
+        try:
+            ink_rgb = tuple(int(c) for c in ink_color)
+        except Exception:
+            ink_rgb = (0, 0, 0)
     else:
-        # обычная обработка
-        ink_rgb = tuple(int(c) for c in ink_color)
+        ink_rgb = (0, 0, 0)
 
     opacity = float(cfg.get("opacity", 1.0))
     h, w = mask.shape
