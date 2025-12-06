@@ -75,10 +75,7 @@ class BaseForgeryGenerator:
         
         chosen_op = random.choices(operations, weights=probabilities)[0]
         
-        if chosen_op == 'bbox_swap':
-            target_key, target_image, target_markup = self.get_random_source()
-            return self.splicing_ops.bbox_swap(image, markup, target_image, target_markup)
-        elif chosen_op == 'external_patch':
+        if chosen_op == 'external_patch':
             patch_key, patch_image, patch_markup = self.get_random_source()
             return self.splicing_ops.external_patch_insertion(image, markup, patch_image, patch_markup)
         elif chosen_op == 'internal_swap':
@@ -102,6 +99,26 @@ class BaseForgeryGenerator:
                 _, source_image, source_markup = self.get_random_source()
             return self.splicing_ops.random_patch_copy_paste(image, markup, source_image, source_markup)
         
+        elif chosen_op == 'bbox_swap':
+            source_key, source_image, source_markup = self.get_random_source()
+            return self.splicing_ops.bbox_swap(image, markup, source_image, source_markup)
+        elif chosen_op == 'patch_from_box_to_another_image':
+            source_key, source_image, source_markup = self.get_random_source()
+            return self.splicing_ops.patch_from_box_to_another_image(image, markup, source_image, source_markup)
+        elif chosen_op == 'patch_from_box_to_another_box':
+            source_key, source_image, source_markup = self.get_random_source()
+            return self.splicing_ops.patch_from_box_to_another_box(image, markup, source_image, source_markup)
+        
+        elif chosen_op == 'copy_box_to_another_box':
+            return self.splicing_ops.copy_box_to_another_box(image, markup)
+        elif chosen_op == 'copy_patch_from_box_to_random_place':
+            return self.splicing_ops.copy_patch_from_box_to_random_place(image, markup)
+        elif chosen_op == 'copy_patch_from_box_to_another_box':
+            return self.splicing_ops.copy_patch_from_box_to_another_box(image, markup)
+
+        elif chosen_op == 'removal_box_with_background':
+            return self.splicing_ops.removal_box_with_background(image, markup)
+
         return image, np.zeros(image.shape[:2], dtype=np.uint8)
     
     def create_output_directories(self):

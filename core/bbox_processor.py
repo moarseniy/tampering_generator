@@ -73,3 +73,124 @@ class BBoxProcessor:
                     suitable_pairs.append((bbox1, bbox2))
         
         return suitable_pairs
+
+    @staticmethod
+    def get_random_patch(image, cfg):
+        """
+           Генерирует случайный патч где угодно по изображению.
+           Размеры патча задаются из диапазонов cfg['patch_width_range'], cfg['patch_height_range'].
+        """
+        image_h, image_w = image.shape[:2]
+
+        # размеры патча
+        patch_w = random.randint(*cfg['patch_width_range'])
+        patch_h = random.randint(*cfg['patch_height_range'])
+
+        # случайная позиция
+        x = random.randint(0, image_w - patch_w)
+        y = random.randint(0, image_h - patch_h)
+
+        return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
+        
+    @staticmethod
+    def get_patch_inside_bbox(image, bbox, cfg, bbox2=None):
+        """
+           Генерирует случайный патч ВНУТРИ указанного бокса.
+           Размеры ПАТЧА — проценты от размера бокса.
+        """
+        image_h, image_w = image.shape[:2]
+        bx, by, bw, bh = bbox["bbox"]
+
+        if bbox2:
+            bx2, by2, bw2, bh2 = bbox2["bbox"]
+            bw, bh = min(bw, bw2), min(bh, bh2)
+
+        # проценты → реальные размеры
+        pct_w = random.uniform(*cfg['patch_width_pct_range'])
+        pct_h = random.uniform(*cfg['patch_height_pct_range'])
+
+        patch_w = max(1, int(bw * pct_w))
+        patch_h = max(1, int(bh * pct_h))
+
+        # чтобы патч был внутри бокса
+        x = random.randint(bx, bx + bw - patch_w)
+        y = random.randint(by, by + bh - patch_h)
+
+        return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
+
+    @staticmethod
+    def get_patch_outside_bboxes(image, bboxes, cfg):
+        """
+        Генерирует случайный патч, который НЕ пересекается ни с одним боксом.
+        Если не нашёл — падает обратно на функцию 1.
+        """
+
+        image_h, image_w = image.shape[:2]
+        
+        # генерируем размер патча
+        patch_w = random.randint(*cfg['patch_width_range'])
+        patch_h = random.randint(*cfg['patch_height_range'])
+
+        # пытаемся найти место
+        for _ in range(50):  # 50 попыток — чтобы не зацикливаться
+            x = random.randint(0, image_w - patch_w)
+            y = random.randint(0, image_h - patch_h)
+
+            # проверяем пересечение
+            intersects = False
+            for bbox in bboxes:
+                bx, by, bw, bh = bbox["bbox"]
+
+                if not (x + patch_w < bx or x > bx + bw or
+                        y + patch_h < by or y > by + bh):
+                    intersects = True
+                    break
+
+            if not intersects:
+                return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
+
+        # fallback — просто случайный патч где угодно
+        return get_random_patch(image, image_w, image_h, cfg)
+
+    @staticmethod
+    def paste_patch_random_place(image, patch):
+        image_h, image_w = image.shape[:2]
+        patch_h, patch_w = patch.shape[:2]
+
+        x = random.randint(0, image_w - patch_w)
+        y = random.randint(0, image_h - patch_h)
+
+        target_image = image.copy()
+
+        target_image[y:y+patch_h, x:x+patch_w] = patch
+
+        return target_image
+
+    @staticmethod
+    def paste_patch_into_bbox(image, patch, bbox):
+        """
+        Вставляет patch внутрь bbox случайным образом.
+        Гарантируется, что patch меньше bbox.
+
+        image : np.ndarray (H, W, 3)
+        patch : np.ndarray (ph, pw, 3)
+        bbox  : либо словарь {"bbox": [x, y, w, h]}, либо список [x, y, w, h]
+
+        Возвращает: новое изображение
+        """
+        x, y, bw, bh = bbox["bbox"]
+
+        H, W = image.shape[:2]
+        ph, pw = patch.shape[:2]
+
+        max_x = x + bw - pw
+        max_y = y + bh - ph
+
+        place_x = random.randint(x, max_x)
+        place_y = random.randint(y, max_y)
+
+        target_image = image.copy()
+
+        target_image[place_y:place_y+ph, place_x:place_x+pw] = patch
+
+        return target_image
