@@ -513,8 +513,8 @@ class SplicingOperations:
         """Замена bbox между двумя документами"""
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
         
-        if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 2 or \
-            'bboxes' not in source_markup or len(source_markup['bboxes']) < 2:
+        if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 1 or \
+            'bboxes' not in source_markup or len(source_markup['bboxes']) < 1:
             print("No bboxes found in markup!")
             return target_image, mask
 
@@ -542,8 +542,11 @@ class SplicingOperations:
                                         target_markup: Dict,
                                         source_image: np.ndarray,
                                         source_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        h, w = target_image.shape[:2]
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
+
+        if 'bboxes' not in source_markup or len(source_markup['bboxes']) < 1:
+            print("No bboxes found in markup!")
+            return target_image, mask
 
         bbox = self.bbox_processor.get_random_bbox(source_markup)
 
@@ -551,9 +554,9 @@ class SplicingOperations:
         
         patch, patch_bbox = self.bbox_processor.get_patch_inside_bbox(source_image, bbox, cfg)
 
-        result_image = self.bbox_processor.paste_patch_random_place(target_image, patch)
+        result_image, result_bbox = self.bbox_processor.paste_patch_random_place(target_image, patch)
         
-        mask = self.bbox_processor.create_bbox_mask(target_image.shape, patch_bbox)
+        mask = self.bbox_processor.create_bbox_mask(target_image.shape, result_bbox)
 
         return result_image, mask
 
@@ -563,8 +566,12 @@ class SplicingOperations:
                                     target_markup: Dict,
                                     source_image: np.ndarray,
                                     source_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        h, w = target_image.shape[:2]
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
+
+        if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 1 or \
+            'bboxes' not in source_markup or len(source_markup['bboxes']) < 1:
+            print("No bboxes found in markup!")
+            return target_image, mask
 
         cfg = self.config['splicing']['operations'].get('patch_from_box_to_another_image', {})
         
@@ -578,17 +585,16 @@ class SplicingOperations:
         else:
             source_bbox, target_bbox = random.choice(suitable_pairs)
 
-        patch, patch_bbox = self.bbox_processor.get_patch_inside_bbox(source_image, source_bbox, cfg)
+        patch, patch_bbox = self.bbox_processor.get_patch_inside_bbox(source_image, source_bbox, cfg, target_bbox)
 
-        result_image = self.bbox_processor.paste_patch_into_bbox(target_image, patch, target_bbox)
+        result_image, result_bbox = self.bbox_processor.paste_patch_into_bbox(target_image, patch, target_bbox)
         
-        mask = self.bbox_processor.create_bbox_mask(target_image.shape, patch_bbox)
+        mask = self.bbox_processor.create_bbox_mask(target_image.shape, result_bbox)
 
         return result_image, mask
 
 
     def copy_box_to_another_box(self, target_image: np.ndarray, target_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        h, w = target_image.shape[:2]
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
 
         if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 2:
@@ -600,13 +606,13 @@ class SplicingOperations:
         if not suitable_pairs:
             # print("No suitable pairs found!")
             # return target_image, mask
-            bbox_target, bbox_target = random.sample(target_markup['bboxes'], 2)
+            bbox_source, bbox_target = random.sample(target_markup['bboxes'], 2)
         else:
-            bbox_target, bbox_target = random.choice(suitable_pairs)
+            bbox_source, bbox_target = random.choice(suitable_pairs)
         
-        target_region = self.bbox_processor.extract_bbox_region(target_image, bbox_target)
+        source_region = self.bbox_processor.extract_bbox_region(target_image, bbox_source)
         
-        result_image = self.bbox_processor.paste_bbox_region(target_image, target_region, bbox_target, resize=True)
+        result_image = self.bbox_processor.paste_bbox_region(target_image, source_region, bbox_target, resize=True)
         
         mask = self.bbox_processor.create_bbox_mask(target_image.shape, bbox_target)
 
@@ -614,28 +620,34 @@ class SplicingOperations:
 
 
     def copy_patch_from_box_to_random_place(self, target_image: np.ndarray, target_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        h, w = target_image.shape[:2]
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
+
+        if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 1:
+            print("No bboxes found in markup!")
+            return target_image, mask
+
         cfg = self.config['splicing']['operations'].get('copy_patch_from_box_to_random_place', {})
         
         bbox = self.bbox_processor.get_random_bbox(target_markup)
         
         patch, patch_bbox = self.bbox_processor.get_patch_inside_bbox(target_image, bbox, cfg)
 
-        result_image = self.bbox_processor.paste_patch_random_place(target_image, patch)
+        result_image, result_bbox = self.bbox_processor.paste_patch_random_place(target_image, patch)
         
-        mask = self.bbox_processor.create_bbox_mask(target_image.shape, patch_bbox)
+        mask = self.bbox_processor.create_bbox_mask(target_image.shape, result_bbox)
 
         return result_image, mask
 
 
     def copy_patch_from_box_to_another_box(self, target_image: np.ndarray, target_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        h, w = target_image.shape[:2]
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
+
+        if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 2:
+            print("No bboxes found in markup!")
+            return target_image, mask
 
         cfg = self.config['splicing']['operations'].get('copy_patch_from_box_to_another_box', {})
         
-        # bbox1, bbox2 = random.sample(target_markup['bboxes'], 2)
         suitable_pairs = self.bbox_processor.find_suitable_bboxes(target_markup, target_markup)
         
         if not suitable_pairs:
@@ -645,29 +657,30 @@ class SplicingOperations:
         else:
             bbox1, bbox2 = random.choice(suitable_pairs)
 
-        # TODO: !!! add bbox2 sizes to function to be sure about patch size
-        patch, patch_bbox = self.bbox_processor.get_patch_inside_bbox(target_image, bbox1, cfg)
+        patch, patch_bbox = self.bbox_processor.get_patch_inside_bbox(target_image, bbox1, cfg, bbox2)
 
-        result_image = self.bbox_processor.paste_patch_into_bbox(target_image, patch, bbox2)
+        result_image, result_bbox = self.bbox_processor.paste_patch_into_bbox(target_image, patch, bbox2)
         
-        mask = self.bbox_processor.create_bbox_mask(target_image.shape, patch_bbox)
+        mask = self.bbox_processor.create_bbox_mask(target_image.shape, result_bbox)
 
         return result_image, mask
 
 
-    def removal_box_with_background(self, target_image: np.ndarray, _markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        h, w = target_image.shape[:2]
+    def removal_box_with_background(self, target_image: np.ndarray, target_markup: Dict) -> Tuple[np.ndarray, np.ndarray]:
         mask = np.zeros(target_image.shape[:2], dtype=np.uint8)
 
-        # TODO: find background patch with size of chosen bbox!
+        if 'bboxes' not in target_markup or len(target_markup['bboxes']) < 1:
+            print("No bboxes found in markup!")
+            return target_image, mask
+
         cfg = self.config['splicing']['operations'].get('removal_box_with_background', {})
 
         bbox = self.bbox_processor.get_random_bbox(target_markup)
 
-        patch, patch_bbox = self.bbox_processor.get_patch_outside_bboxes(target_image, target_markup, cfg)
+        patch, patch_bbox = self.bbox_processor.get_patch_outside_bboxes(target_image, target_markup['bboxes'], cfg, bbox)
 
-        result_image = self.bbox_processor.paste_patch_into_bbox(target_image. patch, bbox)
+        result_image, result_bbox = self.bbox_processor.paste_patch_into_bbox(target_image, patch, bbox)
 
-        mask = self.bbox_processor.create_bbox_mask(target_image.shape, patch_bbox)
+        mask = self.bbox_processor.create_bbox_mask(target_image.shape, result_bbox)
 
         return result_image, mask

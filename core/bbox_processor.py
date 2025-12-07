@@ -74,6 +74,7 @@ class BBoxProcessor:
         
         return suitable_pairs
 
+
     @staticmethod
     def get_random_patch(image, cfg):
         """
@@ -91,7 +92,25 @@ class BBoxProcessor:
         y = random.randint(0, image_h - patch_h)
 
         return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
-        
+
+    
+    @staticmethod
+    def get_random_patch_like_bbox(image, cfg, bbox):
+        image_h, image_w = image.shape[:2]
+        bx, by, bw, bh = bbox["bbox"]
+
+        pct_w = random.uniform(*cfg.get('patch_width_pct_range', (0.6, 0.9)))
+        pct_h = random.uniform(*cfg.get('patch_height_pct_range', (0.6, 0.9)))
+
+        patch_w = max(1, int(bw * pct_w))
+        patch_h = max(1, int(bh * pct_h))
+
+        x = random.randint(0, image_w - patch_w)
+        y = random.randint(0, image_h - patch_h)
+
+        return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
+
+
     @staticmethod
     def get_patch_inside_bbox(image, bbox, cfg, bbox2=None):
         """
@@ -106,8 +125,8 @@ class BBoxProcessor:
             bw, bh = min(bw, bw2), min(bh, bh2)
 
         # проценты → реальные размеры
-        pct_w = random.uniform(*cfg['patch_width_pct_range'])
-        pct_h = random.uniform(*cfg['patch_height_pct_range'])
+        pct_w = random.uniform(*cfg.get('patch_width_pct_range', (0.6, 0.9)))
+        pct_h = random.uniform(*cfg.get('patch_height_pct_range', (0.6, 0.9)))
 
         patch_w = max(1, int(bw * pct_w))
         patch_h = max(1, int(bh * pct_h))
@@ -118,8 +137,9 @@ class BBoxProcessor:
 
         return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
 
+
     @staticmethod
-    def get_patch_outside_bboxes(image, bboxes, cfg):
+    def get_patch_outside_bboxes(image, bboxes, cfg, target_bbox):
         """
         Генерирует случайный патч, который НЕ пересекается ни с одним боксом.
         Если не нашёл — падает обратно на функцию 1.
@@ -127,12 +147,32 @@ class BBoxProcessor:
 
         image_h, image_w = image.shape[:2]
         
+        tx, ty, tw, th = target_bbox["bbox"]
+
+        pct_w = random.uniform(*cfg.get('patch_width_pct_range', (0.7, 1.0)))
+        pct_h = random.uniform(*cfg.get('patch_height_pct_range', (0.7, 1.0)))
+
+        patch_w = max(1, int(tw * pct_w))
+        patch_h = max(1, int(th * pct_h))
+
+        # min_w, max_w = cfg.get('patch_width_pct_range', (40, 80))
+        # min_h, max_h = cfg.get('patch_height_pct_range', (40, 50))
+
+        # max_w = min(max_w, tw)  # патч не шире target_bbox
+        # max_h = min(max_h, th)  # патч не выше target_bbox
+
         # генерируем размер патча
-        patch_w = random.randint(*cfg['patch_width_range'])
-        patch_h = random.randint(*cfg['patch_height_range'])
+        # patch_w = min(image_w, random.randint(*cfg.get('patch_width_range', (40, 80))))
+        # patch_h = min(image_h, random.randint(*cfg.get('patch_height_range', (40, 50))))
+
+        # patch_w = random.randint(max(min_w, 1), max_w)
+        # patch_h = random.randint(max(min_h, 1), max_h)
+        
+        # patch_w = min(patch_w, image_w)
+        # patch_h = min(patch_h, image_h)
 
         # пытаемся найти место
-        for _ in range(50):  # 50 попыток — чтобы не зацикливаться
+        for _ in range(50):
             x = random.randint(0, image_w - patch_w)
             y = random.randint(0, image_h - patch_h)
 
@@ -149,8 +189,8 @@ class BBoxProcessor:
             if not intersects:
                 return image[y:y+patch_h, x:x+patch_w].copy(), {"bbox": [x, y, patch_w, patch_h]}
 
-        # fallback — просто случайный патч где угодно
-        return get_random_patch(image, image_w, image_h, cfg)
+        # fallback
+        return get_random_patch_like_bbox(image, cfg, target_bbox)
 
     @staticmethod
     def paste_patch_random_place(image, patch):
@@ -164,7 +204,7 @@ class BBoxProcessor:
 
         target_image[y:y+patch_h, x:x+patch_w] = patch
 
-        return target_image
+        return target_image, {"bbox": [x, y, patch_w, patch_h]}
 
     @staticmethod
     def paste_patch_into_bbox(image, patch, bbox):
@@ -174,7 +214,7 @@ class BBoxProcessor:
 
         image : np.ndarray (H, W, 3)
         patch : np.ndarray (ph, pw, 3)
-        bbox  : либо словарь {"bbox": [x, y, w, h]}, либо список [x, y, w, h]
+        bbox  : словарь {"bbox": [x, y, w, h]}
 
         Возвращает: новое изображение
         """
@@ -193,4 +233,4 @@ class BBoxProcessor:
 
         target_image[place_y:place_y+ph, place_x:place_x+pw] = patch
 
-        return target_image
+        return target_image, {"bbox": [place_x, place_y, pw, ph]}

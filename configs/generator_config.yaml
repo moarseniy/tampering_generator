@@ -24,6 +24,30 @@ splicing:
       probability: 0.4
       #allowed_categories: ["text", "date", "number", "name"]
     
+    patch_from_box_to_another_image:
+      enabled: false
+      probability: 0.4
+
+    patch_from_box_to_another_box:
+      enabled: false
+      probability: 0.4
+
+    copy_box_to_another_box:
+      enabled: false
+      probability: 0.4
+
+    copy_patch_from_box_to_random_place:
+      enabled: false
+      probability: 0.4
+
+    copy_patch_from_box_to_another_box:
+      enabled: false
+      probability: 0.4
+
+    removal_box_with_background:
+      enabled: true
+      probability: 0.4
+
     external_patch:
       enabled: false
       probability: 0.6
@@ -36,7 +60,7 @@ splicing:
       probability: 0.5
     
     print_text:
-      enabled: true
+      enabled: false
       probability: 0.4
       text_len: [1, 6]
       word_count: [1, 3]
@@ -109,6 +133,7 @@ splicing:
         splat_prob: 0.0                 # Вероятность появление "клякс" / брызг
         extra_small_strokes_prob: 0.0   # Вероятность добавления маленьких дополнительных штрихов
         variable_sampling: True         # Переменная дискретизация: делает подпись менее ровной
+
 
 
 # Настройки качества
